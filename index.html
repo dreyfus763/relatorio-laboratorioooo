@@ -1,0 +1,3313 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Relatório Pizzaria</title>
+<!-- Controle diário da pizzaria: caixa, funcionários, vendas, despesas, anotações e pizzas iFood -->
+<!-- Firebase via REST: sem SDK externo, app abre mesmo offline -->
+<!-- Dia comercial vira às 06:00 (não à meia-noite) -->
+
+<style>
+:root {
+  --bg:#f2f2f2; --surface:#fff; --surface2:#f7f7f7;
+  --border:#e0e0e0; --text:#111; --muted:#888;
+  --green:#1D9E75; --green-lt:#edfaf5;
+  --red:#E24B4A; --red-lt:#fff5f5;
+  --orange:#f59e0b; --orange-lt:#fffbeb;
+  --purple:#7c3aed; --purple-lt:#f5f3ff;
+  --calcred:#dc2626; --calcred-lt:#fef2f2;
+  --r:10px;
+}
+body.theme-dark {
+  --bg:#15171a; --surface:#1e2024; --surface2:#26282d;
+  --border:#34373c; --text:#eee; --muted:#8a8d93;
+  --green:#2ecf95; --green-lt:#15302a;
+  --red:#ff6b6a; --red-lt:#3a1f20;
+  --orange:#ffb648; --orange-lt:#332a18;
+  --purple:#a78bfa; --purple-lt:#2a2440;
+  --calcred:#ff6b6a; --calcred-lt:#3a1f20;
+}
+body.theme-neon {
+  --bg:#0a0612; --surface:#150e24; --surface2:#1c1233;
+  --border:#3d2a66; --text:#f1e8ff; --muted:#9b87c4;
+  --green:#39ff9e; --green-lt:#0f2e22;
+  --red:#ff3d7f; --red-lt:#33102090;
+  --orange:#ffd23f; --orange-lt:#332b0f;
+  --purple:#c850ff; --purple-lt:#26133f;
+  --calcred:#ff3d7f; --calcred-lt:#33102090;
+}
+/* Tema neon: leve brilho nas bordas e títulos para reforçar o clima cyberpunk */
+body.theme-neon .sec{box-shadow:0 0 0 1px rgba(57,255,158,0.08), 0 0 18px rgba(200,80,255,0.06);}
+body.theme-neon .hdr{box-shadow:0 1px 12px rgba(57,255,158,0.12);}
+body.theme-neon .sec-title{text-shadow:0 0 8px rgba(57,255,158,0.35);}
+body.theme-neon .home-logo{filter:drop-shadow(0 0 14px rgba(200,80,255,0.55));}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:200;}
+.hdr-icon{width:32px;height:32px;background:#e25c1a;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.theme-btn{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:8px;opacity:.7;transition:opacity .15s;}
+.theme-btn:hover{opacity:1;}
+.page{display:none;}.page.active{display:block;}
+/* HOME */
+.home-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;padding:24px;text-align:center;}
+.home-logo{font-size:60px;margin-bottom:14px;}
+.home-title{font-size:22px;font-weight:700;margin-bottom:6px;}
+.home-sub{font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.5;}
+.home-date{font-size:13px;color:var(--muted);margin-top:14px;}
+.home-status-box{background:var(--green-lt);border:1px solid rgba(29,158,117,.3);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--green);display:none;}
+.home-status-box.warn{background:var(--orange-lt);border-color:rgba(245,158,11,.35);color:var(--orange);}
+/* CONTAINER */
+.ctr{max-width:680px;margin:0 auto;padding:14px 12px 60px;}
+/* TABS */
+.tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:100;}
+.tabs-search-wrap{flex:1.3;display:flex;align-items:center;padding:7px 10px;min-width:0;}
+.tabs-search-input{width:100%;border:1px solid var(--border);border-radius:99px;padding:6px 12px;font-size:12px;color:var(--text);background:var(--surface2);outline:none;font-family:inherit;}
+.tabs-search-input:focus{border-color:var(--green);background:var(--surface);}
+.tabs-search-input::placeholder{color:var(--muted);}
+.tab-btn{flex:1;padding:10px 4px;font-size:13px;font-weight:600;border:none;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;font-family:inherit;}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green);}
+/* SECTION */
+.sec{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);margin-bottom:12px;overflow:hidden;}
+.sec-hdr{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface2);}
+.sec-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;}
+.sec-body{padding:12px 14px;}
+/* FORMS */
+.fg{display:flex;flex-direction:column;gap:3px;}
+.fg label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+.fg input,.fg select,.fg textarea{border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:14px;color:var(--text);outline:none;font-family:inherit;background:var(--surface);width:100%;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--green);}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.sec-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
+.func-entreg-wrap{display:flex;gap:12px;align-items:stretch;}
+.func-entreg-wrap > .sec{display:flex;flex-direction:column;}
+.func-entreg-wrap > .sec > .sec-body{flex:1;}
+/* BUTTONS */
+.btn{padding:7px 14px;border-radius:7px;font-size:13px;cursor:pointer;font-weight:700;border:none;font-family:inherit;transition:opacity .15s;}
+.btn:hover{opacity:.85;}
+.btn-green{background:var(--green);color:#fff;}
+.btn-gray{background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.btn-red{background:var(--red-lt);color:var(--red);border:1px solid rgba(226,75,74,.25);}
+.btn-purple{background:var(--purple-lt);color:var(--purple);border:1px solid #ddd6fe;}
+.btn-orange{background:var(--orange-lt);color:#b45309;border:1px solid rgba(245,158,11,.35);}
+.btn-calc{background:var(--calcred-lt);color:var(--calcred);border:1px solid rgba(220,38,38,.35);}
+.btn-copy{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;}
+.btn-big{padding:14px 28px;font-size:16px;border-radius:12px;}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;}
+/* CARDS */
+.func-card{border-radius:8px;border:1px solid var(--border);padding:11px 12px;margin-bottom:8px;background:var(--surface2);position:relative;}
+.func-card.free{border-color:var(--purple);background:var(--purple-lt);}
+.func-card.calc{border-color:var(--calcred);background:var(--calcred-lt);}
+.func-name{font-size:12px;font-weight:800;letter-spacing:-.01em;}
+/* Easter egg: enquanto o Fabinho estiver com turno em aberto (ver funcCard),
+   o card dele inteiro vira uma mini tempestade — borda pulsando e raios
+   piscando espalhados pelo card, não só perto do nome. Puramente CSS, em
+   loop infinito, sem precisar de JS/timers rodando o tempo todo. */
+.storm-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible;}
+.storm-bolt-path{fill:none;stroke:#7ef9ff;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:boltFlash 2.2s ease-in infinite;animation-delay:var(--d,0s);}
+.storm-bolt-branch{fill:none;stroke:#c9fdff;stroke-width:0.9;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:boltFlash 2.2s ease-in infinite;animation-delay:var(--d,0s);}
+@keyframes boltFlash{
+  0%,92%,100%{opacity:0;}
+  4%{opacity:1;}
+  8%{opacity:0;}
+  46%{opacity:0;}
+  50%{opacity:1;}
+  54%{opacity:0;}
+}
+/* Easter egg: pétalas de cerejeira caindo pelo card do Fernando (ver
+   funcCard). Puramente CSS, em loop infinito — "top" animado em % pra
+   atravessar a altura do card inteiro, seja qual for o tamanho dele. */
+.sakura-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none;border-radius:8px;z-index:1;}
+.sakura-petal{position:absolute;top:-10%;left:var(--x,10%);width:var(--size,10px);height:var(--size,10px);opacity:0;animation:sakuraFall var(--dur,2s) linear infinite;animation-delay:var(--d,0s);filter:drop-shadow(0 0 2px rgba(255,158,199,.55));}
+@keyframes sakuraFall{
+  0%{top:-10%;transform:translateX(0) rotate(0deg);opacity:0;}
+  10%{opacity:.95;}
+  50%{transform:translateX(16px) rotate(190deg);}
+  90%{opacity:.85;}
+  100%{top:110%;transform:translateX(-12px) rotate(360deg);opacity:0;}
+}
+.func-turno{font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5;}
+.func-turno-row{margin-top:5px;display:flex;flex-wrap:wrap;align-items:center;gap:2px;}
+.func-horario{font-size:13px;font-weight:700;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;letter-spacing:.01em;}
+.func-horario em{font-style:normal;color:var(--green);}
+.func-horario-sep{color:var(--muted);font-size:12px;margin:0 4px;}
+.func-horario-vazio{color:var(--muted);background:var(--surface);border-color:var(--border);font-weight:600;font-family:inherit;}
+.func-consumo{font-size:12px;color:var(--text);margin-top:4px;}
+.func-status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.func-status-dot.presente{background:var(--green);box-shadow:0 0 0 2px var(--green-lt);}
+.func-status-dot.saiu{background:var(--muted);}
+.func-pag{font-size:14px;font-weight:700;color:var(--purple);margin-top:5px;}
+.func-obs{font-size:12px;color:var(--muted);margin-top:3px;}
+.func-search{width:100%;border:1px solid var(--border);border-radius:99px;padding:6px 12px;font-size:12px;color:var(--muted);background:var(--surface2);outline:none;margin-bottom:9px;font-family:inherit;}
+.func-search:focus{border-color:var(--green);color:var(--text);background:var(--surface);}
+.func-search::placeholder{color:var(--muted);}
+.func-group-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:6px;}
+.func-group-label:first-child{margin-top:0;}
+.item-card{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;margin-bottom:6px;gap:8px;}
+.item-left{flex:1;min-width:0;}
+.item-val{font-size:14px;font-weight:700;}
+.item-desc{font-size:13px;font-weight:500;}
+.item-plat{font-size:11px;color:var(--muted);margin-top:1px;}
+.item-actions{display:flex;gap:5px;flex-shrink:0;margin-left:8px;}
+.dep-card{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--orange-lt);border:1px solid rgba(245,158,11,.35);border-radius:7px;margin-bottom:6px;}
+.devia-card{display:flex;justify-content:space-between;align-items:flex-start;padding:7px 10px;background:var(--green-lt);border:1px solid rgba(29,158,117,.3);border-radius:7px;margin-bottom:5px;gap:8px;}
+.devia-card.devem{background:var(--red-lt);border-color:rgba(226,75,74,.3);}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:700;display:inline-block;}
+.pill-func{background:#e8f5e9;color:#2e7d32;}
+.pill-free{background:var(--purple-lt);color:var(--purple);}
+.total-box{background:var(--surface2);border-radius:8px;padding:10px 12px;margin-top:8px;display:flex;justify-content:space-between;font-weight:700;font-size:14px;}
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;align-items:flex-end;justify-content:center;}
+.modal-box{background:var(--surface);border-radius:16px 16px 0 0;padding:20px 16px 30px;width:100%;max-width:680px;max-height:92vh;overflow-y:auto;}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:14px;}
+/* HISTÓRICO */
+.hist-year{font-size:14px;font-weight:700;padding:10px 0 6px;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:8px;}
+.hist-month{font-size:13px;font-weight:600;color:var(--text);margin:10px 0 6px 0;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;}
+.hist-month:hover{border-color:var(--green);}
+.hist-month-arrow{color:var(--muted);font-size:12px;}
+.hist-month-days{padding-top:2px;}
+.hist-day{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
+.hist-day:hover{border-color:var(--green);}
+/* REL PREVIEW */
+.rel-preview{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;font-family:monospace;white-space:pre-wrap;max-height:320px;overflow-y:auto;margin-bottom:12px;line-height:1.6;}
+.fin-box{background:var(--green-lt);border:1px solid rgba(29,158,117,.3);border-radius:var(--r);padding:14px;margin-bottom:12px;}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:14px;}
+/* PIZZAS IFOOD */
+.piz-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+.piz-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.piz-box-label{font-size:13px;font-weight:600;color:var(--text);flex-shrink:0;}
+.piz-ctrl{display:flex;align-items:center;gap:6px;margin-left:auto;}
+.piz-btn{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--surface);font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text);flex-shrink:0;line-height:1;}
+.piz-btn:hover{opacity:.8;}
+.piz-btn.minus{color:var(--red);}
+.piz-btn.plus{color:var(--green);}
+.piz-val{font-size:15px;font-weight:700;width:34px;text-align:center;border:1px solid transparent;border-radius:6px;padding:4px 2px;background:transparent;color:var(--text);font-family:inherit;-moz-appearance:textfield;}
+.piz-val::-webkit-outer-spin-button,.piz-val::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.piz-val:focus{border-color:var(--green);background:var(--surface);outline:none;}
+.piz-total{background:var(--green-lt);border:1px solid rgba(29,158,117,.3);border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;color:var(--green);}
+/* IMPORTAR */
+.import-textarea{width:100%;min-height:220px;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:13px;font-family:monospace;resize:vertical;background:var(--surface);color:var(--text);}
+.import-preview{margin-top:14px;}
+.imp-line{padding:5px 8px;border-radius:6px;margin-bottom:3px;font-size:11px;line-height:1.35;display:flex;justify-content:space-between;align-items:flex-start;gap:6px;border:1px solid var(--border);background:var(--surface2);}
+.imp-line.warn{background:var(--orange-lt);border-color:rgba(245,158,11,.35);}
+.imp-line.ok{background:var(--green-lt);border-color:rgba(29,158,117,.25);}
+.imp-tag{font-size:9px;font-weight:700;text-transform:uppercase;padding:1px 5px;border-radius:99px;background:var(--surface);color:var(--muted);flex-shrink:0;}
+.imp-summary{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
+/* CALCULADORA DE HORAS (multi-dia) */
+.calc-day-card{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--surface2);}
+.calc-day-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;}
+.calc-total-box{background:var(--calcred-lt);border:1px solid rgba(220,38,38,.3);border-radius:var(--r);padding:14px;margin-top:12px;}
+.calc-hist-card{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;}
+/* SCROLL FAB */
+.scroll-fab{position:fixed;right:16px;bottom:22px;width:46px;height:46px;border-radius:50%;background:var(--green);color:#fff;border:none;font-size:18px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.25);z-index:150;display:flex;align-items:center;justify-content:center;transition:transform .15s, opacity .15s;}
+.scroll-fab:active{transform:scale(0.92);}
+.scroll-fab.at-bottom{background:var(--surface);color:var(--green);border:1px solid var(--green);}
+@media(max-width:480px){.row2{grid-template-columns:1fr 1fr;}.sec-pair{grid-template-columns:1fr;}.func-entreg-wrap{flex-direction:column;}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-icon">🍕</div>
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:15px;font-weight:700;">Relatório Pizzaria</div>
+    <div id="sync-status" style="font-size:11px;color:var(--muted);">Conectando...</div>
+  </div>
+  <div id="hdr-right" style="font-size:12px;color:var(--muted);flex-shrink:0;"></div>
+  <button class="theme-btn" id="btn-home-hdr" onclick="voltarInicio()" title="Voltar ao início" style="display:none;">🏠</button>
+  <button class="theme-btn" id="theme-btn" onclick="cicleTheme()" title="Mudar tema">🎨</button>
+</div>
+
+<!-- HOME -->
+<div class="page active" id="page-home">
+  <div class="home-wrap">
+    <div class="home-logo">🍕</div>
+    <div class="home-title">Pizzaria</div>
+    <div id="home-status-box" class="home-status-box"></div>
+    <button class="btn btn-green btn-big" id="btn-abrir" type="button" onclick="abrirRelatorioSafe()">📋 Abrir Relatório</button>
+    <button class="btn btn-gray" style="margin-top:12px;padding:10px 24px;" onclick="irHistorico()">🗂️ Ver Histórico</button>
+    <button class="btn btn-gray" style="margin-top:12px;padding:10px 24px;" onclick="irConfig()">⚙️ Configurações</button>
+    <div class="home-date" id="home-date"></div>
+  </div>
+</div>
+
+<!-- RELATÓRIO -->
+<div class="page" id="page-rel">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('anotar')">✏️ Anotar</button>
+    <button class="tab-btn" onclick="switchTab('finalizar')">✅ Finalizar</button>
+    <div class="tabs-search-wrap">
+      <input type="text" id="func-search" class="tabs-search-input" placeholder="🔍 Buscar em tudo..." oninput="filtrarFunc()" onkeydown="if(event.key==='Enter'){event.preventDefault();irParaResultadoBusca();}"/>
+    </div>
+  </div>
+  <button class="scroll-fab" id="scroll-fab" onclick="irParaFim()" title="Ir para o fim" style="display:none;">⬇️</button>
+  <div class="ctr">
+
+    <!-- TAB ANOTAR -->
+    <div id="tab-anotar">
+      <div class="btn-row" style="margin-bottom:4px;">
+        <button class="btn btn-purple" style="flex:1;justify-content:center;" onclick="abrirModalImport()">📥 Importar texto (colar relatório)</button>
+      </div>
+      <!-- CAIXA + MOTO FIXO -->
+      <div class="func-entreg-wrap">
+        <div class="sec" style="flex:1.6;margin-bottom:12px;">
+          <div class="sec-hdr"><div class="sec-title">💰 Caixa</div></div>
+          <div class="sec-body">
+            <div class="row2" style="margin-bottom:10px;">
+              <div class="fg"><label>Caixa Inicial (R$)</label><input type="text" inputmode="numeric" class="money-input" id="cx-ini" placeholder="0,00" oninput="autoSave()"/></div>
+              <div class="fg"><label>Caixa Final (R$)</label><input type="text" inputmode="numeric" class="money-input" id="cx-fin" placeholder="0,00" oninput="autoSave()"/></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <div style="font-size:12px;font-weight:700;color:var(--muted);">DEPÓSITOS DO DIA</div>
+              <button class="btn btn-orange" style="padding:4px 10px;font-size:12px;" onclick="abrirModalDep()">+ Depósito</button>
+            </div>
+            <div id="dep-list"><div class="empty">Nenhum depósito hoje ainda.</div></div>
+          </div>
+        </div>
+        <div class="sec" style="flex:1;margin-bottom:12px;">
+          <div class="sec-hdr">
+            <div class="sec-title">Moto Fixo</div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-copy" onclick="copiarEntregadores()">📋 Copiar</button>
+              <button class="btn btn-green" onclick="abrirModalEntregador()">+ Moto</button>
+            </div>
+          </div>
+          <div class="sec-body">
+            <div id="entreg-list"><div class="empty">Nenhum moto fixo ainda.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FUNCIONÁRIOS -->
+      <div class="sec">
+        <div class="sec-hdr">
+          <div class="sec-title">👥 Funcionários</div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-calc" title="Calculadora de horas (multi-dia)" onclick="abrirCalculadora()">🧮</button>
+            <button class="btn btn-green" onclick="abrirModalFunc(false)">+ Func</button>
+            <button class="btn btn-purple" onclick="abrirModalFunc(true)">+ Free</button>
+          </div>
+        </div>
+        <div class="sec-body">
+          <div id="func-list"><div class="empty">Nenhum funcionário ainda.</div></div>
+        </div>
+      </div>
+
+      <!-- VENDAS + DESPESAS -->
+      <div class="func-entreg-wrap">
+        <div class="sec" style="flex:1;">
+          <div class="sec-hdr">
+            <div class="sec-title">🛒 Vendas</div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-copy" onclick="copiarSecao('vendas')">📋 Copiar</button>
+              <button class="btn btn-green" onclick="abrirModalItem('venda')">+ Venda</button>
+            </div>
+          </div>
+          <div class="sec-body">
+            <div id="vendas-list"><div class="empty">Nenhuma venda ainda.</div></div>
+            <div id="vendas-total" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="sec" style="flex:1;">
+          <div class="sec-hdr">
+            <div class="sec-title">📋 Despesas</div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-copy" onclick="copiarSecao('despesas')">📋 Copiar</button>
+              <button class="btn btn-green" onclick="abrirModalItem('despesa')">+ Despesa</button>
+            </div>
+          </div>
+          <div class="sec-body">
+            <div id="desp-list"><div class="empty">Nenhuma despesa ainda.</div></div>
+            <div id="desp-total" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DEVEMOS + DEVEM -->
+      <div class="func-entreg-wrap">
+        <div class="sec" style="flex:1;margin-bottom:12px;">
+          <div class="sec-hdr">
+            <div class="sec-title">🟢 Devemos</div>
+            <button class="btn btn-copy" onclick="abrirModalDevia('devemos')">+ Anotar</button>
+          </div>
+          <div class="sec-body" id="devia-list"><div class="empty">Nada aqui ainda.</div></div>
+        </div>
+        <div class="sec" style="flex:1;margin-bottom:12px;">
+          <div class="sec-hdr">
+            <div class="sec-title">🔴 Devem pra nós</div>
+            <button class="btn btn-red" onclick="abrirModalDevia('devem')">+ Anotar</button>
+          </div>
+          <div class="sec-body" id="devem-list"><div class="empty">Nada aqui ainda.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB FINALIZAR -->
+    <div id="tab-finalizar" style="display:none;">
+      <div class="fin-box">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px;">✅ Relatório do dia</div>
+        <div style="font-size:13px;color:var(--green);">Confira abaixo e copie para enviar.</div>
+      </div>
+      <div class="rel-preview" id="rel-preview"></div>
+      <div class="btn-row">
+        <button class="btn btn-copy btn-big" onclick="copiarTudo()">📋 Copiar relatório completo</button>
+        <button class="btn btn-green btn-big" onclick="abrirModalPlanilha()">📊 Enviar horários pra planilha</button>
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn btn-gray" id="btn-voltar-rel" style="width:100%;padding:10px;" onclick="voltarDoRelatorio()">← Voltar ao início</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- CONFIGURAÇÕES -->
+<div class="page" id="page-config">
+  <div class="ctr" style="padding-top:16px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <button class="btn btn-gray" onclick="irHome()">←</button>
+      <div style="font-size:18px;font-weight:800;">⚙️ Configurações</div>
+    </div>
+
+    <!-- EQUIPE -->
+    <div class="sec">
+      <div class="sec-hdr">
+        <div class="sec-title">👥 Equipe cadastrada</div>
+        <button class="btn btn-green" onclick="addNomeEquipe()">+ Nome</button>
+      </div>
+      <div class="sec-body">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
+          Cadastre aqui os nomes EXATAMENTE como estão nas abas da planilha. No relatório, o nome do funcionário é escolhido desta lista (sem digitar), evitando erro de escrita.
+        </div>
+        <div id="config-equipe-list"></div>
+      </div>
+    </div>
+
+    <!-- PLANILHA -->
+    <div class="sec">
+      <div class="sec-hdr"><div class="sec-title">📊 Planilha</div></div>
+      <div class="sec-body">
+        <div class="fg" style="margin-bottom:6px;">
+          <label>URL do Web App (Apps Script)</label>
+          <input type="text" id="config-planilha-url" placeholder="https://script.google.com/macros/s/.../exec"/>
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;">
+          Só muda se você republicar/trocar a planilha. Fica salva aqui e é usada no botão "Enviar horários pra planilha".
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:4px;">
+      <button class="btn btn-green btn-big" onclick="salvarConfig()">💾 Salvar configurações</button>
+    </div>
+    <div id="config-status" style="font-size:12px;margin-top:10px;text-align:center;"></div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-gray" style="width:100%;padding:10px;" onclick="irHome()">← Voltar ao início</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTÓRICO -->
+<div class="page" id="page-hist">
+  <div class="ctr" style="padding-top:16px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <button class="btn btn-gray" onclick="irHome()">← Início</button>
+      <div style="font-size:16px;font-weight:700;">📂 Histórico</div>
+    </div>
+    <div class="btn-row" style="margin-bottom:14px;margin-top:0;">
+      <button class="btn btn-copy" onclick="exportarBackup()">⬇️ Backup completo</button>
+      <label class="btn btn-orange" style="cursor:pointer;">⬆️ Restaurar backup<input type="file" accept=".json" id="backup-import-input" style="display:none;" onchange="importarBackup(event)"/></label>
+    </div>
+    <div id="hist-content"><div class="empty">Carregando...</div></div>
+  </div>
+</div>
+
+<!-- VER/EDITAR DIA -->
+<div class="page" id="page-ver">
+  <div class="ctr" style="padding-top:16px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <button class="btn btn-gray" onclick="showPage('page-hist')">← Histórico</button>
+      <div style="font-size:16px;font-weight:700;" id="ver-titulo"></div>
+    </div>
+    <!-- tabs ver/editar -->
+    <div style="display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:3px;margin-bottom:14px;">
+      <button class="btn btn-green" id="ver-tab-ver" onclick="switchVerTab('ver')" style="flex:1;border-radius:7px;">👁️ Ver</button>
+      <button class="btn btn-gray" id="ver-tab-edit" onclick="switchVerTab('edit')" style="flex:1;border-radius:7px;">✏️ Editar</button>
+    </div>
+    <div id="ver-panel">
+      <div class="rel-preview" id="ver-preview" style="max-height:none;"></div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn btn-copy" onclick="copiarVer()">📋 Copiar</button>
+      </div>
+    </div>
+    <div id="edit-panel" style="display:none;">
+      <div style="background:var(--orange-lt);border:1px solid rgba(245,158,11,.35);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--orange);">
+        ✏️ Editando relatório de <strong id="edit-data-label"></strong>. As alterações são salvas automaticamente.
+      </div>
+      <!-- mesmas seções de edição -->
+      <div class="func-entreg-wrap">
+        <div class="sec" style="flex:1.6;margin-bottom:12px;">
+          <div class="sec-hdr"><div class="sec-title">💰 Caixa</div></div>
+          <div class="sec-body">
+            <div class="row2" style="margin-bottom:10px;">
+              <div class="fg"><label>Caixa Inicial (R$)</label><input type="text" inputmode="numeric" class="money-input" id="ecx-ini" placeholder="0,00" oninput="editAutoSave()"/></div>
+              <div class="fg"><label>Caixa Final (R$)</label><input type="text" inputmode="numeric" class="money-input" id="ecx-fin" placeholder="0,00" oninput="editAutoSave()"/></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <div style="font-size:12px;font-weight:700;color:var(--muted);">DEPÓSITOS</div>
+              <button class="btn btn-orange" style="padding:4px 10px;font-size:12px;" onclick="eAbrirModalDep()">+ Depósito</button>
+            </div>
+            <div id="edep-list"><div class="empty">Nenhum depósito ainda.</div></div>
+          </div>
+        </div>
+        <div class="sec" style="flex:1;margin-bottom:12px;">
+          <div class="sec-hdr">
+            <div class="sec-title">Moto Fixo</div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-copy" onclick="eCopiarEntregadores()">📋 Copiar</button>
+              <button class="btn btn-green" onclick="eAbrirModalEntregador()">+ Moto</button>
+            </div>
+          </div>
+          <div class="sec-body">
+            <div id="eentreg-list"><div class="empty">Nenhum moto fixo.</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-hdr">
+          <div class="sec-title">👥 Funcionários</div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-green" onclick="eAbrirModalFunc(false)">+ Func</button>
+            <button class="btn btn-purple" onclick="eAbrirModalFunc(true)">+ Free</button>
+          </div>
+        </div>
+        <div class="sec-body">
+          <input type="text" id="efunc-search" class="func-search" placeholder="🔍 Buscar funcionário..." oninput="eFiltrarFunc()"/>
+          <div id="efunc-list"><div class="empty">Nenhum funcionário.</div></div>
+        </div>
+      </div>
+      <div class="func-entreg-wrap">
+        <div class="sec" style="flex:1;">
+          <div class="sec-hdr">
+            <div class="sec-title">🛒 Vendas</div>
+            <button class="btn btn-green" onclick="eAbrirModalItem('venda')">+ Venda</button>
+          </div>
+          <div class="sec-body">
+            <div id="evendas-list"><div class="empty">Nenhuma venda.</div></div>
+            <div id="evendas-total" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="sec" style="flex:1;">
+          <div class="sec-hdr">
+            <div class="sec-title">📋 Despesas</div>
+            <button class="btn btn-green" onclick="eAbrirModalItem('despesa')">+ Despesa</button>
+          </div>
+          <div class="sec-body">
+            <div id="edesp-list"><div class="empty">Nenhuma despesa.</div></div>
+            <div id="edesp-total" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="func-entreg-wrap">
+        <div class="sec" style="flex:1;">
+          <div class="sec-hdr">
+            <div class="sec-title">🟢 Devemos</div>
+            <button class="btn btn-copy" onclick="eAbrirModalDevia('devemos')">+ Anotar</button>
+          </div>
+          <div class="sec-body" id="edevia-list"><div class="empty">Nada aqui ainda.</div></div>
+        </div>
+        <div class="sec" style="flex:1;">
+          <div class="sec-hdr">
+            <div class="sec-title">🔴 Devem pra nós</div>
+            <button class="btn btn-red" onclick="eAbrirModalDevia('devem')">+ Anotar</button>
+          </div>
+          <div class="sec-body" id="edevem-list"><div class="empty">Nada aqui ainda.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FUNC (usado por ambos) -->
+<div class="modal-bg" id="modal-func">
+  <div class="modal-box">
+    <div class="modal-title" id="mf-title">Adicionar Funcionário</div>
+    <input type="hidden" id="mf-idx" value="-1"/>
+    <input type="hidden" id="mf-ctx" value="main"/>
+    <div class="fg" style="margin-bottom:10px;">
+      <label>Nome</label>
+      <select id="mf-nome-select" onchange="onNomeSelectChange()"></select>
+      <input type="text" id="mf-nome" placeholder="Digite o nome" style="margin-top:6px;display:none;"/>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">TURNOS</div>
+    <div id="mf-turnos"></div>
+    <button class="btn btn-gray" style="margin-bottom:10px;" onclick="addTurnoForm()">+ Turno / Intervalo</button>
+    <div class="fg" style="margin-bottom:10px;"><label>Consumo (opcional)</label><input type="text" id="mf-consumo" placeholder="ex: marmita, coca 2l"/></div>
+    <div id="mf-free-fields" style="display:none;background:var(--purple-lt);border-radius:8px;padding:10px;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:var(--purple);margin-bottom:8px;">💜 FREELANCE</div>
+      <div class="row2">
+        <div class="fg"><label>R$/hora</label><input type="text" inputmode="numeric" class="money-input" id="mf-vlrh" placeholder="0,00" oninput="calcFree()"/></div>
+        <div class="fg"><label>Total pago (R$)</label><input type="text" inputmode="numeric" class="money-input" id="mf-total" placeholder="0,00"/></div>
+      </div>
+      <div id="mf-calc" style="font-size:12px;color:var(--purple);margin-top:5px;font-weight:600;"></div>
+    </div>
+    <div class="fg" style="margin-bottom:10px;"><label>Observação (opcional)</label><input type="text" id="mf-obs" placeholder="ex: chegou atrasado..."/></div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="salvarFunc()">Salvar</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-func')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ITEM -->
+<div class="modal-bg" id="modal-item">
+  <div class="modal-box">
+    <div class="modal-title" id="mi-title">Adicionar Venda</div>
+    <input type="hidden" id="mi-tipo" value="venda"/>
+    <input type="hidden" id="mi-idx" value="-1"/>
+    <input type="hidden" id="mi-ctx" value="main"/>
+    <div class="fg" style="margin-bottom:10px;"><label>Valor (R$)</label><input type="text" inputmode="numeric" class="money-input" id="mi-val" placeholder="0,00"/></div>
+    <div class="fg" style="margin-bottom:10px;"><label>Descrição</label><input type="text" id="mi-desc" placeholder="ex: Pizza grande + coca 2l"/></div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="salvarItem()">Salvar</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-item')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DEPÓSITO -->
+<div class="modal-bg" id="modal-dep">
+  <div class="modal-box">
+    <div class="modal-title" id="md2-title">Adicionar Depósito</div>
+    <input type="hidden" id="md2-idx" value="-1"/>
+    <input type="hidden" id="md2-ctx" value="main"/>
+    <div class="row2" style="margin-bottom:10px;">
+      <div class="fg"><label>Valor (R$)</label><input type="text" inputmode="numeric" class="money-input" id="md2-val" placeholder="0,00"/></div>
+      <div class="fg"><label>Quem fez</label><input type="text" id="md2-quem" placeholder="ex: Gustavo"/></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="salvarDep()">Salvar</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-dep')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DEVIA -->
+<div class="modal-bg" id="modal-devia">
+  <div class="modal-box">
+    <div class="modal-title">Anotação / Devendo</div>
+    <input type="hidden" id="md-idx" value="-1"/>
+    <input type="hidden" id="md-ctx" value="main"/>
+    <input type="hidden" id="md-tipo" value="devemos"/>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">CATEGORIA</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button type="button" id="md-tipo-btn-devemos" class="btn" style="flex:1;" onclick="selecionarTipoDevia('devemos')">Devemos</button>
+      <button type="button" id="md-tipo-btn-devem" class="btn" style="flex:1;" onclick="selecionarTipoDevia('devem')">Devem</button>
+    </div>
+    <div class="fg" style="margin-bottom:10px;"><label>Nome / descrição</label><textarea id="md-nome" placeholder="ex: Moto João - levou maquininha" rows="2" style="resize:vertical;"></textarea></div>
+    <div class="fg" style="margin-bottom:10px;"><label>Valor (R$) — opcional</label><input type="text" inputmode="numeric" class="money-input" id="md-val" placeholder="0,00"/></div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="salvarDevia()">Salvar</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-devia')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ENTREGADOR -->
+<div class="modal-bg" id="modal-entregador">
+  <div class="modal-box">
+    <div class="modal-title" id="me-title">Adicionar Moto Fixo</div>
+    <input type="hidden" id="me-idx" value="-1"/>
+    <input type="hidden" id="me-ctx" value="main"/>
+    <div class="fg" style="margin-bottom:10px;"><label>Nome do entregador</label><input type="text" id="me-nome" placeholder="ex: Jhonny"/></div>
+    <div class="row2" style="margin-bottom:10px;">
+      <div class="fg"><label>Chegou</label><input type="time" id="me-ent"/></div>
+      <div class="fg"><label>Saiu</label><input type="time" id="me-sai"/></div>
+    </div>
+    <div class="row2" style="margin-bottom:10px;">
+      <div class="fg"><label>Qtd. de entregas</label><input type="number" min="0" step="1" id="me-qtd" placeholder="0"/></div>
+      <div class="fg"><label>Total da taxa (R$)</label><input type="text" inputmode="numeric" class="money-input" id="me-taxa" placeholder="0,00"/></div>
+    </div>
+    <div class="fg" style="margin-bottom:10px;"><label>Maquininha que está levando</label><input type="text" id="me-maquininha" placeholder="ex: Maquininha 1 / Stone 2"/></div>
+    <div class="fg" style="margin-bottom:6px;"><label>Valor em dinheiro (R$)</label><input type="text" inputmode="numeric" class="money-input" id="me-dinheiro" placeholder="0,00"/></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Esse valor é só para nossa conferência interna — não entra quando você clicar em "Copiar".</div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="salvarEntregador()">Salvar</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-entregador')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORTAR TEXTO -->
+<div class="modal-bg" id="modal-import">
+  <div class="modal-box" style="max-width:560px;">
+    <div class="modal-title">📥 Importar texto do relatório</div>
+    <div id="import-step-paste">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5;">
+        Cole abaixo o texto do relatório (qualquer formato). As informações que ele reconhecer serão somadas ao relatório de hoje — nada é sobrescrito.
+      </div>
+      <textarea class="import-textarea" id="import-raw" placeholder="Cole aqui o texto copiado..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="processarImport()">Analisar texto</button>
+        <button class="btn btn-gray" onclick="fecharModal('modal-import')">Cancelar</button>
+      </div>
+    </div>
+    <div id="import-step-preview" style="display:none;">
+      <div class="imp-summary" id="import-summary"></div>
+      <div class="import-preview" id="import-preview-list"></div>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="confirmarImport()">✅ Aplicar ao relatório de hoje</button>
+        <button class="btn btn-gray" onclick="voltarImportPaste()">← Voltar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ENVIAR PRA PLANILHA -->
+<div class="modal-bg" id="modal-planilha">
+  <div class="modal-box" style="max-width:560px;">
+    <div class="modal-title">📊 Enviar horários pra planilha</div>
+    <div class="fg" style="margin-bottom:6px;">
+      <label>URL do Web App da planilha (Apps Script)</label>
+      <input type="text" id="pl-url" placeholder="https://script.google.com/macros/s/.../exec"/>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">
+      Cole aqui a URL que o Google gerou ao publicar o Apps Script (termina em <strong>/exec</strong>). Ela fica salva neste aparelho — só precisa configurar uma vez.
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">O QUE SERÁ ENVIADO (dia <span id="pl-dia"></span>)</div>
+    <div id="pl-preview" style="max-height:230px;overflow-y:auto;margin-bottom:12px;"></div>
+    <div class="btn-row">
+      <button class="btn btn-green" id="pl-btn-enviar" onclick="enviarParaPlanilha()">📤 Enviar agora</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-planilha')">Fechar</button>
+    </div>
+    <div id="pl-status" style="font-size:12px;margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- MODAL CALCULADORA DE HORAS (multi-dia / freelance) -->
+<div class="modal-bg" id="modal-calc">
+  <div class="modal-box" style="max-width:600px;">
+    <div class="modal-title" style="color:var(--calcred);">🧮 Calculadora de horas — Freelance</div>
+    <input type="hidden" id="cc-idx" value="-1"/>
+    <div class="row2" style="margin-bottom:10px;">
+      <div class="fg"><label>Nome do freelance</label><input type="text" id="cc-nome" placeholder="ex: Gustavo"/></div>
+      <div class="fg"><label>R$ / hora</label><input type="text" inputmode="numeric" class="money-input" id="cc-vlrh" placeholder="0,00" oninput="calcCalculadora()"/></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">DIAS / TURNOS TRABALHADOS</div>
+    <div id="cc-dias"></div>
+    <button class="btn btn-gray" style="margin-bottom:10px;" onclick="addDiaCalculadora()">+ Dia / Turno</button>
+    <div class="calc-total-box" id="cc-total"></div>
+    <div class="fg" style="margin:12px 0 10px;"><label>Observação (opcional)</label><input type="text" id="cc-obs" placeholder="ex: pagamento semanal dom-dom"/></div>
+    <div class="btn-row">
+      <button class="btn btn-calc" onclick="salvarCalculo()">💾 Salvar cálculo</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-calc')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO DE CÁLCULOS -->
+<div class="modal-bg" id="modal-calc-hist">
+  <div class="modal-box" style="max-width:600px;">
+    <div class="modal-title" style="color:var(--calcred);">🧮 Cálculos salvos</div>
+    <div id="cc-hist-list"><div class="empty">Nenhum cálculo salvo ainda.</div></div>
+    <div class="btn-row">
+      <button class="btn btn-calc" onclick="fecharModal('modal-calc-hist');abrirNovoCalculo();">+ Novo cálculo</button>
+      <button class="btn btn-gray" onclick="fecharModal('modal-calc-hist')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== ESTADO =====
+// ===== FIREBASE REST + CACHE LOCAL / UTILITÁRIOS =====
+const FIREBASE_DB_URL = 'https://base-de-dados-dashboard-12ac2-default-rtdb.firebaseio.com';
+const CACHE_KEY_FALLBACK = 'piz_cache';
+const DEVICE_ID_KEY = 'piz_device_id';
+const CALC_CACHE_KEY = 'piz_calc_cache';
+
+function setStatusSafe(msg, color) {
+  const el = document.getElementById('sync-status');
+  if (el) { el.textContent = msg; el.style.color = color || '#888'; }
+}
+
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      const c = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null;
+      id = c || (String(Date.now()) + '-' + Math.random().toString(16).slice(2));
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch (e) {
+    return 'device-' + Math.random().toString(16).slice(2);
+  }
+}
+const DEVICE_ID = getDeviceId();
+
+// ===== TEMA (claro / escuro / neon) =====
+const THEME_KEY = 'piz_theme';
+const THEMES = ['light','dark','neon'];
+const THEME_ICON = { light:'🎨', dark:'🌙', neon:'⚡' };
+function applyTheme(theme){
+  document.body.classList.remove('theme-dark','theme-neon');
+  if(theme==='dark') document.body.classList.add('theme-dark');
+  else if(theme==='neon') document.body.classList.add('theme-neon');
+  const btn = document.getElementById('theme-btn');
+  if(btn) btn.textContent = THEME_ICON[theme] || '🎨';
+}
+function getTheme(){
+  try { return localStorage.getItem(THEME_KEY) || 'light'; } catch(e){ return 'light'; }
+}
+function cicleTheme(){
+  const atual = getTheme();
+  const next = THEMES[(THEMES.indexOf(atual)+1) % THEMES.length];
+  try { localStorage.setItem(THEME_KEY, next); } catch(e){}
+  applyTheme(next);
+}
+applyTheme(getTheme());
+
+
+function readLocalCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY_FALLBACK) || '{}'); }
+  catch (e) { return {}; }
+}
+function writeLocalCache(cache) {
+  try { localStorage.setItem(CACHE_KEY_FALLBACK, JSON.stringify(cache)); }
+  catch (e) {}
+}
+function getLocal(dateKey) {
+  return readLocalCache()[dateKey] || null;
+}
+function putLocal(dateKey, data) {
+  const cache = readLocalCache();
+  cache[dateKey] = data;
+  writeLocalCache(cache);
+}
+function firebaseUrl(path) {
+  return FIREBASE_DB_URL.replace(/\/$/, '') + '/' + path + '.json';
+}
+async function firebaseGet(path) {
+  const res = await fetch(firebaseUrl(path), { method: 'GET', cache: 'no-store' });
+  if (!res.ok) throw new Error('Firebase GET ' + res.status);
+  return await res.json();
+}
+async function firebaseSet(path, data) {
+  const res = await fetch(firebaseUrl(path), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error('Firebase PUT ' + res.status);
+  return await res.json();
+}
+
+// Salva local na hora. Tenta sincronizar com Firebase depois. Não depende de SDK externo.
+window._save = async function(dateKey, data) {
+  const now = Date.now();
+  const payload = {
+    ...normalizeState(data),
+    _meta: { ...(data && data._meta ? data._meta : {}), updatedAt: now, loadedAt: now, deviceId: DEVICE_ID }
+  };
+  putLocal(dateKey, payload);
+  setStatusSafe('💾 Salvo localmente', '#f59e0b');
+
+  try {
+    const remote = await firebaseGet('pizzaria/' + dateKey);
+    const remoteUpdated = remote && remote._meta && remote._meta.updatedAt ? Number(remote._meta.updatedAt) : 0;
+    const loadedAt = data && data._meta && data._meta.loadedAt ? Number(data._meta.loadedAt) : 0;
+
+    if (remoteUpdated && loadedAt && remoteUpdated > loadedAt && remote._meta.deviceId !== DEVICE_ID) {
+      const ok = confirm('Existe uma versão mais nova desse relatório salva em outro aparelho. Quer sobrescrever mesmo assim?');
+      if (!ok) {
+        putLocal(dateKey, remote);
+        setStatusSafe('⚠️ Versão remota mantida', '#f59e0b');
+        return;
+      }
+    }
+
+    await firebaseSet('pizzaria/' + dateKey, payload);
+    setStatusSafe('☁️ Sincronizado', '#1D9E75');
+  } catch (e) {
+    console.warn('Sem sincronizar Firebase; mantido localmente', e);
+    setStatusSafe('⚠️ Sem internet/Firebase — salvo localmente', '#f59e0b');
+  }
+};
+
+window._load = async function(dateKey) {
+  const local = getLocal(dateKey);
+  try {
+    const remote = await firebaseGet('pizzaria/' + dateKey);
+    if (remote) {
+      const normalized = normalizeState(remote);
+      normalized._meta = { ...(normalized._meta || {}), loadedAt: Date.now() };
+      putLocal(dateKey, normalized);
+      setStatusSafe('☁️ Sincronizado', '#1D9E75');
+      return normalized;
+    }
+    return local ? normalizeState(local) : null;
+  } catch (e) {
+    if (local) {
+      setStatusSafe('⚠️ Offline — usando cache', '#f59e0b');
+      return normalizeState(local);
+    }
+    setStatusSafe('⚠️ Offline', '#f59e0b');
+    return null;
+  }
+};
+
+window._loadAllKeys = async function() {
+  const localKeys = Object.keys(readLocalCache());
+  try {
+    const remote = await firebaseGet('pizzaria');
+    if (remote && typeof remote === 'object') {
+      const cache = readLocalCache();
+      Object.entries(remote).forEach(([k, v]) => { cache[k] = normalizeState(v); });
+      writeLocalCache(cache);
+      setStatusSafe('☁️ Sincronizado', '#1D9E75');
+      return Object.keys(cache);
+    }
+    return localKeys;
+  } catch (e) {
+    setStatusSafe(localKeys.length ? '⚠️ Offline — usando cache' : '⚠️ Offline', '#f59e0b');
+    return localKeys;
+  }
+};
+
+window._getCached = function(dateKey) {
+  const local = getLocal(dateKey);
+  return local ? normalizeState(local) : null;
+};
+
+// ===== CÁLCULOS DE HORAS (freelance multi-dia) — persistência local + Firebase =====
+function readCalcCache(){
+  try { return JSON.parse(localStorage.getItem(CALC_CACHE_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function writeCalcCache(cache){
+  try { localStorage.setItem(CALC_CACHE_KEY, JSON.stringify(cache)); } catch(e){}
+}
+async function calcSaveAll(cache){
+  writeCalcCache(cache);
+  try { await firebaseSet('pizzaria_calc', cache); } catch(e){ console.warn('Sem sincronizar cálculos', e); }
+}
+async function calcLoadAll(){
+  const local = readCalcCache();
+  try {
+    const remote = await firebaseGet('pizzaria_calc');
+    if(remote && typeof remote === 'object'){
+      writeCalcCache(remote);
+      return remote;
+    }
+    return local;
+  } catch(e){
+    return local;
+  }
+}
+
+// Garante que o botão funciona mesmo em prévia/sandbox.
+window.abrirRelatorioSafe = async function() {
+  try {
+    await abrirRelatorio();
+  } catch (e) {
+    console.error('Erro ao abrir relatório', e);
+    alert('Erro ao abrir relatório: ' + (e && e.message ? e.message : e));
+  }
+};
+
+function escapeHTML(str) {
+  return String(str ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+let currentDate = '';
+let state = emptyState();
+// Quando o usuário edita um dia do Histórico, reaproveitamos a MESMA tela do
+// relatório do dia (page-rel) apontando currentDate/state pra aquele dia —
+// assim o histórico é idêntico ao relatório de hoje (abas Anotar/Finalizar,
+// botão de planilha, tudo), sem tela paralela que fica desatualizada. Esta
+// flag lembra que estamos nesse modo pra o "Voltar" ir pro Histórico.
+let editandoHistorico = false;
+let editState = emptyState();
+let editDate = '';
+let autoSaveTimer = null;
+let editSaveTimer = null;
+let turnoForms = [];
+let funcIsFreelance = false;
+
+function emptyState() {
+  return { cxIni:'', cxFin:'', depositos:[], funcionarios:[], vendas:[], despesas:[], devias:[], entregadores:[], pizzas:{p:0,m:0,g:0,gg:0} };
+}
+
+
+function normalizeState(raw) {
+  const base = emptyState();
+  if(!raw || typeof raw !== 'object') return base;
+  const out = { ...base, ...raw };
+  out.depositos = Array.isArray(raw.depositos) ? raw.depositos : [];
+  out.funcionarios = Array.isArray(raw.funcionarios) ? raw.funcionarios : [];
+  out.vendas = Array.isArray(raw.vendas) ? raw.vendas : [];
+  out.despesas = Array.isArray(raw.despesas) ? raw.despesas : [];
+  out.devias = (Array.isArray(raw.devias) ? raw.devias : []).map(d=>({
+    ...d,
+    // Registros antigos (antes das categorias) e importados sem tipo caem
+    // em "devemos" por padrão — que era o comportamento anterior do card.
+    tipo: d && (d.tipo==='devem'||d.tipo==='devemos') ? d.tipo : 'devemos'
+  }));
+  out.entregadores = Array.isArray(raw.entregadores) ? raw.entregadores : [];
+  out.cxIni = raw.cxIni ?? '';
+  out.cxFin = raw.cxFin ?? '';
+  const rp = (raw.pizzas && typeof raw.pizzas === 'object') ? raw.pizzas : {};
+  out.pizzas = { p: Number(rp.p)||0, m: Number(rp.m)||0, g: Number(rp.g)||0, gg: Number(rp.gg)||0 };
+  if(raw._meta) out._meta = raw._meta;
+  return out;
+}
+
+function cloneState(raw) {
+  return normalizeState(JSON.parse(JSON.stringify(raw || {})));
+}
+
+function parseMoney(value) {
+  if(value === null || value === undefined) return NaN;
+  let s = String(value).trim();
+  if(!s) return NaN;
+  s = s.replace(/\s/g, '').replace(/R\$/gi, '');
+  // Vírgula presente = separador decimal (pontos, se houver, são milhar).
+  // Sem vírgula: qualquer ponto é SEMPRE separador de milhar, nunca decimal
+  // — nossa própria máscara (formatMoneyInput) nunca produz ponto como
+  // decimal. Sem essa distinção, "1.650" (mil seiscentos e cinquenta,
+  // digitado como "1650") virava 1.65 (Number lia o ponto como decimal).
+  if(s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(/\./g, '');
+  return Number(s);
+}
+
+// ===== MÁSCARA DE MOEDA (digitação normal: inteiro primeiro, depois decimais) =====
+// Digitar "42" deixa "42" no campo — não "0,42" como seria no estilo
+// calculadora antigo (que enchia da direita pra esquerda, tipo POS). Se
+// quiser centavos, digita a vírgula: "42,5". Ao sair do campo (blur), o
+// valor é arredondado para duas casas: "42" vira "42,00".
+function formatMoneyInput(raw){
+  let s = String(raw??'').replace(/[^\d,]/g,'');
+  const primeiraVirgula = s.indexOf(',');
+  if(primeiraVirgula>=0){
+    // só a primeira vírgula digitada conta; outras que a pessoa digite depois são ignoradas
+    s = s.slice(0,primeiraVirgula+1) + s.slice(primeiraVirgula+1).replace(/,/g,'');
+  }
+  let [intPart, decPart] = s.split(',');
+  intPart = (intPart||'').replace(/^0+(?=\d)/,'');
+  if(decPart!==undefined) decPart = decPart.slice(0,2);
+  if(!intPart && decPart===undefined) return '';
+  if(!intPart) intPart='0';
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return decPart!==undefined ? `${intPart},${decPart}` : intPart;
+}
+// Formata um NÚMERO EM REAIS já existente (ex: vindo do banco: 367 ou 367.5)
+// para o texto "367,00" — usado ao carregar um valor salvo num campo.
+function formatMoneyValue(num){
+  const n = parseFloat(num);
+  if(num===null || num===undefined || num==='' || isNaN(n)) return '';
+  return n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+// Liga a máscara em todo campo .money-input, na ordem normal de digitação.
+// Funciona tanto para campos já existentes na carga da página quanto para
+// os criados depois (modais), via delegação de evento.
+document.addEventListener('input', function(e){
+  if(!e.target.classList || !e.target.classList.contains('money-input')) return;
+  e.target.value = formatMoneyInput(e.target.value);
+}, true);
+// Ao sair do campo, arredonda/completa para duas casas decimais — "42" vira
+// "42,00", "42,5" vira "42,50". blur não borbulha, por isso o listener
+// precisa estar na fase de captura (terceiro argumento "true").
+document.addEventListener('blur', function(e){
+  if(!e.target.classList || !e.target.classList.contains('money-input')) return;
+  const el = e.target;
+  if(!el.value) return;
+  const n = parseMoney(el.value);
+  if(!isNaN(n)) el.value = formatMoneyValue(n);
+}, true);
+// Preenche um campo .money-input já com a máscara aplicada (usado ao carregar
+// dados salvos ou abrir um item para edição — nunca escrever .value direto
+// nesses campos, sempre por aqui, para não exibir "367" em vez de "367,00").
+function setMoneyField(id, valor){
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(valor===null || valor===undefined || valor===''){ el.value=''; return; }
+  el.value = formatMoneyValue(valor);
+}
+
+
+// Vira o "dia" do relatório às 06:00, não à meia-noite — a pizzaria fecha perto
+// das 02:00, então de madrugada (00:00–05:59) o relatório ainda pertence ao dia
+// comercial anterior (ex: 02:30 de uma sexta ainda conta como quinta).
+const HORA_VIRADA_DIA = 6;
+function todayStr() {
+  const d = new Date();
+  if (d.getHours() < HORA_VIRADA_DIA) {
+    d.setDate(d.getDate() - 1);
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function fmtDate(d) { if(!d)return''; const[y,m,dia]=d.split('-'); return`${dia}/${m}/${y}`; }
+function fmt(n) { return parseFloat(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+// ===== HOME =====
+const MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+document.getElementById('home-date').textContent = 'Hoje: ' + fmtDate(todayStr());
+
+async function initHome() {
+  const td = todayStr();
+  const box = document.getElementById('home-status-box');
+  const btn = document.getElementById('btn-abrir');
+
+  // Verifica cache local primeiro — instantâneo
+  const cached = window._getCached ? window._getCached(td) : null;
+  function updateUI(hasData) {
+    if(hasData) {
+      box.style.display = 'block';
+      box.className = 'home-status-box';
+      box.innerHTML = `✅ Já existe um relatório para hoje (${fmtDate(td)}). Clicando em abrir você continua editando.`;
+      btn.textContent = '📋 Continuar Relatório de Hoje';
+    } else {
+      box.style.display = 'block';
+      box.className = 'home-status-box warn';
+      box.innerHTML = `📋 Nenhum relatório para hoje (${fmtDate(td)}). Toque para criar.`;
+      btn.textContent = '📋 Abrir Relatório de Hoje';
+    }
+  }
+
+  // Mostra estado do cache imediatamente
+  updateUI(!!cached);
+
+  // Atualiza do Firebase em background
+  if(window._load) {
+    window._load(td).then(data => updateUI(!!data));
+  }
+}
+
+async function abrirRelatorio() {
+  editandoHistorico = false;
+  currentDate = todayStr();
+  document.getElementById('hdr-right').textContent = fmtDate(currentDate);
+
+  // Abre a página IMEDIATAMENTE com estado vazio ou cache
+  const cached = window._getCached ? window._getCached(currentDate) : null;
+  state = cached ? cloneState(cached) : emptyState();
+  setMoneyField('cx-ini', state.cxIni);
+  setMoneyField('cx-fin', state.cxFin);
+  render();
+  showPage('page-rel');
+  switchTab('anotar');
+
+  // Carrega do Firebase em background. Só re-renderiza se o conteúdo
+  // realmente mudou em relação ao cache já exibido — caso contrário, um
+  // segundo render() reconstrói o innerHTML dos cards bem no momento em
+  // que o usuário pode estar clicando no botão ✏️, e o clique se perde
+  // porque o elemento clicado é substituído antes do evento ser processado.
+  if(window._load) {
+    window._load(currentDate).then(data => {
+      if(data && JSON.stringify(normalizeState(data)) !== JSON.stringify(normalizeState(state))) {
+        state = cloneState(data);
+        setMoneyField('cx-ini', state.cxIni);
+        setMoneyField('cx-fin', state.cxFin);
+        render();
+      }
+    });
+  }
+}
+
+function irHome() {
+  showPage('page-home');
+  document.getElementById('hdr-right').textContent='';
+  initHome();
+}
+
+function irHistorico() { showPage('page-hist'); carregarHistorico(); }
+
+// ===== PAGES =====
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const fab = document.getElementById('scroll-fab');
+  if(fab) fab.style.display = (id==='page-rel') ? 'flex' : 'none';
+  // Botão de casinha no cabeçalho aparece em tudo, menos na própria home.
+  const btnHome = document.getElementById('btn-home-hdr');
+  if(btnHome) btnHome.style.display = (id==='page-home') ? 'none' : 'flex';
+}
+
+// Volta pro início de qualquer lugar com um clique. Se estava editando um dia
+// do histórico, também limpa esse modo.
+function voltarInicio(){
+  editandoHistorico = false;
+  document.getElementById('hdr-right').textContent='';
+  irHome();
+}
+
+// ===== TABS =====
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['anotar','finalizar'][i]===name));
+  document.getElementById('tab-anotar').style.display=name==='anotar'?'block':'none';
+  document.getElementById('tab-finalizar').style.display=name==='finalizar'?'block':'none';
+  if(name==='finalizar'){ document.getElementById('rel-preview').textContent=gerarTexto(state,currentDate); atualizarBotaoVoltar(); }
+}
+
+// ===== BOTÃO FLUTUANTE DE SCROLL =====
+// Vai para o fim da página; se já estiver perto do fim, volta para o topo.
+// Útil porque a tela "Anotar" cresce muito (funcionários, vendas, despesas,
+// anotações, pizzas) e essas duas últimas seções costumam ser as mais usadas.
+function irParaFim(){
+  const fab = document.getElementById('scroll-fab');
+  const pertoDoFim = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 80);
+  if(pertoDoFim) window.scrollTo({top:0, behavior:'smooth'});
+  else window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'});
+}
+function atualizarScrollFab(){
+  const fab = document.getElementById('scroll-fab');
+  if(!fab) return;
+  const pertoDoFim = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 80);
+  fab.textContent = pertoDoFim ? '⬆️' : '⬇️';
+  fab.title = pertoDoFim ? 'Ir para o topo' : 'Ir para o fim';
+  fab.classList.toggle('at-bottom', pertoDoFim);
+}
+window.addEventListener('scroll', atualizarScrollFab, {passive:true});
+
+function switchVerTab(name) {
+  // "Editar" agora abre o editor COMPLETO (mesma tela do relatório do dia),
+  // não o painel simplificado antigo — por isso, ao clicar em Editar, saímos
+  // desta página e chamamos editarDia. "Ver" continua sendo só a prévia.
+  if(name==='edit'){ editarDia(editDate); return; }
+  document.getElementById('ver-panel').style.display='block';
+  document.getElementById('edit-panel').style.display='none';
+  document.getElementById('ver-tab-ver').className='btn btn-green';
+  document.getElementById('ver-tab-edit').className='btn btn-gray';
+  document.getElementById('ver-tab-ver').style.flex='1';document.getElementById('ver-tab-ver').style.borderRadius='7px';
+  document.getElementById('ver-tab-edit').style.flex='1';document.getElementById('ver-tab-edit').style.borderRadius='7px';
+  document.getElementById('ver-preview').textContent=gerarTexto(editState,editDate);
+}
+
+// ===== SAVE =====
+function autoSave() {
+  state.cxIni=parseMoney(document.getElementById('cx-ini').value)||'';
+  state.cxFin=parseMoney(document.getElementById('cx-fin').value)||'';
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>{ if(!currentDate) currentDate = todayStr(); window._save(currentDate,state); },900);
+}
+function save() {
+  if(!currentDate) currentDate = todayStr();
+  state.cxIni=parseMoney(document.getElementById('cx-ini').value)||'';
+  state.cxFin=parseMoney(document.getElementById('cx-fin').value)||'';
+  window._save(currentDate,state);
+}
+function editAutoSave() {
+  editState.cxIni=parseMoney(document.getElementById('ecx-ini').value)||'';
+  editState.cxFin=parseMoney(document.getElementById('ecx-fin').value)||'';
+  clearTimeout(editSaveTimer);
+  editSaveTimer=setTimeout(()=>{ if(editDate) window._save(editDate,editState); },900);
+}
+function editSave() {
+  if(!editDate) return;
+  editState.cxIni=parseMoney(document.getElementById('ecx-ini').value)||'';
+  editState.cxFin=parseMoney(document.getElementById('ecx-fin').value)||'';
+  window._save(editDate,editState);
+}
+
+// ===== RENDER PRINCIPAL =====
+function render() { state = normalizeState(state); renderDep(); renderFunc(); renderVendas(); renderDesp(); renderDevia(); renderEntregadores(); }
+function eRender() { editState = normalizeState(editState); eRenderDep(); eRenderFunc(); eRenderVendas(); eRenderDesp(); eRenderDevia(); eRenderEntregadores(); }
+
+// ===== DEPÓSITOS =====
+function depCard(d,i,ctx){
+  return `<div class="dep-card">
+      <div><span style="font-weight:700;">R$ ${fmt(d.val)}</span>${d.quem?` — ${escapeHTML(d.quem)}`:''}</div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button onclick="${ctx==='edit'?'eEditDep':'editDep'}(${i})" class="btn btn-gray" style="padding:3px 7px;font-size:11px;">✏️</button>
+        <button onclick="${ctx==='edit'?'eRemDep':'remDep'}(${i})" class="btn btn-red" style="padding:3px 7px;font-size:11px;">✕</button>
+      </div>
+    </div>`;
+}
+function renderDep() {
+  const el=document.getElementById('dep-list');
+  state = normalizeState(state);
+  if(!state.depositos.length){el.innerHTML='<div class="empty">Nenhum depósito hoje ainda.</div>';return;}
+  const total=state.depositos.reduce((s,d)=>s+parseFloat(d.val||0),0);
+  el.innerHTML=state.depositos.map((d,i)=>depCard(d,i,'main')).join('')+(state.depositos.length>1?`<div style="font-size:13px;font-weight:700;color:var(--orange);padding:4px 2px;">Total: R$ ${fmt(total)}</div>`:'');
+}
+function abrirModalDep(){_openModalDep(-1,'main',null);}
+function editDep(i){_openModalDep(i,'main',state.depositos[i]);}
+function remDep(i){if(!confirm('Excluir este depósito?'))return;state.depositos.splice(i,1);renderDep();save();}
+
+function eRenderDep() {
+  const el=document.getElementById('edep-list');
+  editState = normalizeState(editState);
+  if(!editState.depositos.length){el.innerHTML='<div class="empty">Nenhum depósito ainda.</div>';return;}
+  const total=editState.depositos.reduce((s,d)=>s+parseFloat(d.val||0),0);
+  el.innerHTML=editState.depositos.map((d,i)=>depCard(d,i,'edit')).join('')+(editState.depositos.length>1?`<div style="font-size:13px;font-weight:700;color:var(--orange);padding:4px 2px;">Total: R$ ${fmt(total)}</div>`:'');
+}
+function eAbrirModalDep(){_openModalDep(-1,'edit',null);}
+function eEditDep(i){_openModalDep(i,'edit',editState.depositos[i]);}
+function eRemDep(i){if(!confirm('Excluir este depósito?'))return;editState.depositos.splice(i,1);eRenderDep();editSave();}
+
+function _openModalDep(idx,ctx,d){
+  document.getElementById('md2-idx').value=idx;
+  document.getElementById('md2-ctx').value=ctx;
+  document.getElementById('md2-title').textContent=idx>=0?'Editar Depósito':'Adicionar Depósito';
+  setMoneyField('md2-val', d?d.val:'');
+  document.getElementById('md2-quem').value=d?d.quem||'':'';
+  abrirModal('modal-dep');
+}
+function salvarDep(){
+  const val=parseMoney(document.getElementById('md2-val').value);
+  const quem=document.getElementById('md2-quem').value.trim();
+  if(isNaN(val)){alert('Digite o valor.');return;}
+  const reg={val,quem};
+  const idx=parseInt(document.getElementById('md2-idx').value);
+  const ctx=document.getElementById('md2-ctx').value;
+  const arr=ctx==='edit'?editState.depositos:state.depositos;
+  if(idx>=0)arr[idx]=reg;else arr.push(reg);
+  fecharModal('modal-dep');
+  if(ctx==='edit'){eRenderDep();editSave();}else{renderDep();save();}
+}
+
+// ===== FUNCIONÁRIOS =====
+// Determina se o funcionário ainda está trabalhando (último turno sem saída
+// preenchida) ou já saiu (todos os turnos têm entrada e saída).
+function funcStatus(f){
+  // Entrada criada pela calculadora de horas (multi-dia): não é presença nem
+  // consumo, é um registro de pagamento já fechado — tem grupo próprio.
+  if(f.fromCalc) return 'calculo';
+  const turnos = (f.turnos||[]).filter(t=>t.ent||t.sai);
+  // Sem nenhum horário: não é alguém "no trabalho" nem "que saiu" — é só um
+  // registro de consumo (ex: pizza/coca de alguém que passou lá), então não
+  // entra na contagem de presença.
+  if(!turnos.length) return 'consumo';
+  const ultimo = turnos[turnos.length-1];
+  if(ultimo.ent && !ultimo.sai) return 'presente';
+  if(turnos.every(t=>t.ent && t.sai)) return 'saiu';
+  return 'indefinido';
+}
+
+function fmtHorasNum(h){
+  const n = parseFloat(h)||0;
+  if(!n) return '0h';
+  const hh = Math.floor(n);
+  const mm = Math.round((n-hh)*60);
+  return mm>0 ? `${hh}h${mm}m` : `${hh}h`;
+}
+
+// ===== GERADOR DE RAIO PROCEDURAL (easter egg do Fabinho) =====
+// Em vez de um zigue-zague fixo, cada raio é montado com pontos aleatórios
+// a cada renderização — incluindo, às vezes, um pequeno galho saindo do meio
+// do raio principal, como um raio de verdade se ramificando.
+function _raioClamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function gerarRaioPontos(xBase, segmentos, jitter){
+  const pontos = [{x:xBase, y:0}];
+  let x = xBase;
+  const passo = 100/segmentos;
+  for(let s=1; s<=segmentos; s++){
+    x = _raioClamp(x + (Math.random()*jitter*2 - jitter), 3, 97);
+    pontos.push({x, y:passo*s});
+  }
+  return pontos;
+}
+function pontosParaPath(pontos){
+  return pontos.map((p,idx)=> (idx===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+}
+function gerarRamoRaio(pontos){
+  if(pontos.length<3) return '';
+  const idx = 1 + Math.floor(Math.random()*(pontos.length-2));
+  const origem = pontos[idx];
+  const comprimento = 6 + Math.random()*10;
+  const angulo = (Math.random()<0.5?-1:1) * (30 + Math.random()*35);
+  const rad = angulo * Math.PI/180;
+  const meio = { x:_raioClamp(origem.x + Math.sin(rad)*comprimento*0.6, 0,100), y: origem.y + Math.cos(rad)*comprimento*0.6 };
+  const fim  = { x:_raioClamp(origem.x + Math.sin(rad)*comprimento, 0,100),     y: origem.y + Math.cos(rad)*comprimento };
+  return `M${origem.x.toFixed(1)},${origem.y.toFixed(1)} L${meio.x.toFixed(1)},${meio.y.toFixed(1)} L${fim.x.toFixed(1)},${fim.y.toFixed(1)}`;
+}
+
+function funcCard(f, i, ctx) {
+  const status = funcStatus(f);
+
+  // Entrada vinda da Calculadora de horas: não mostra turno por turno no
+  // card (viraria uma lista enorme) — mostra só um resumo compacto, com
+  // botão para expandir e ver todos os dias/horários se precisar.
+  if(f.fromCalc){
+    const dias = f.calcDias||[];
+    const detId = `calc-days-${ctx}-${i}`;
+    const diasHtml = dias.length
+      ? dias.map(d=>`<div style="font-size:12px;color:var(--text);padding:4px 0;border-bottom:1px dashed var(--border);display:flex;justify-content:space-between;gap:8px;">
+          <span>${d.data?fmtDate(d.data):'(sem data)'}</span>
+          <span style="font-family:'SF Mono',Consolas,monospace;">${d.ent||'?'} – ${d.sai||'?'}</span>
+          <span style="color:var(--calcred);font-weight:600;">${fmtHorasNum(calcHorasUmDia(d))}</span>
+        </div>`).join('')
+      : '<div class="empty" style="padding:6px;">Nenhum dia registrado.</div>';
+    const pag = f.totalPago ? `<div class="func-pag" style="color:var(--calcred);">>>>>>>>> R$ ${fmt(f.totalPago)} Pago!!!!${f.horasStr?` (${f.horasStr})`:''}</div>` : '';
+    const obs = f.obs?`<div class="func-obs">📝 ${escapeHTML(f.obs)}</div>`:'';
+    return `<div class="func-card calc" data-func-nome="${escapeHTML(f.nome.toLowerCase())}" data-func-status="calculo">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="min-width:0;">
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <span class="func-name">${escapeHTML(f.nome)}</span>
+            <span class="pill pill-free">Freelance</span>
+            <span class="pill" style="background:var(--calcred-lt);color:var(--calcred);">🧮 Cálculo de horas</span>
+          </div>
+          ${pag}${obs}
+          <button class="btn btn-gray" style="padding:3px 9px;font-size:11px;margin-top:6px;" onclick="toggleCalcDias('${ctx}',${i})">📅 Ver dias trabalhados (${dias.length})</button>
+          <div id="${detId}" style="display:none;margin-top:6px;">${diasHtml}</div>
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0;">
+          <button onclick="${ctx==='edit'?'eEditFunc':'editFunc'}(${i})" class="btn btn-gray" style="padding:4px 8px;font-size:11px;">✏️</button>
+          <button onclick="${ctx==='edit'?'eRemFunc':'remFunc'}(${i})" class="btn btn-red" style="padding:4px 8px;font-size:11px;">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const turnos = (f.turnos||[]).filter(t=>t.ent||t.sai);
+  const turnosHtml = turnos.length
+    ? turnos.map(t=>`<span class="func-horario">${t.ent||'?'} – ${t.sai||'<em>agora</em>'}</span>`).join('<span class="func-horario-sep">|</span>')
+    : '<span class="func-horario func-horario-vazio">sem horário</span>';
+  const consumoHtml = f.consumo ? `<div class="func-consumo"><strong>Consumo:</strong> <strong>${escapeHTML(f.consumo)}</strong></div>` : '';
+  const pag=f.freelance&&f.totalPago?`<div class="func-pag">>>>>>>>> R$ ${fmt(f.totalPago)} Pago!!!!${f.horasStr?` (${f.horasStr})`:''}</div>`:'';
+  const obs=f.obs?`<div class="func-obs">📝 ${escapeHTML(f.obs)}</div>`:'';
+  const statusDot = status==='presente' ? '<span class="func-status-dot presente" title="Ainda no trabalho"></span>' : (status==='saiu' ? '<span class="func-status-dot saiu" title="Já saiu"></span>' : '');
+  // Easter egg: o Fabinho, enquanto estiver com turno em aberto, transforma
+  // o card inteiro dele numa mini tempestade — raios piscando espalhados
+  // pelo card e a borda pulsando, não só um detalhe perto do nome. Só ele,
+  // só de propósito, e só enquanto o horário estiver aberto (sai vazio no
+  // último turno).
+  const ehFabinhoAtivo = status==='presente' && f.nome.trim().toLowerCase()==='fabinho';
+  const boltFilterId = `boltGlow-${ctx}-${i}`;
+  let stormBolts = '';
+  if(ehFabinhoAtivo){
+    const basesX = [12 + Math.random()*12, 40 + Math.random()*20, 76 + Math.random()*12];
+    let pathsHtml = '';
+    basesX.forEach((bx, idx)=>{
+      const segmentos = 5 + Math.floor(Math.random()*3);
+      const jitter = 8 + Math.random()*9;
+      const pontos = gerarRaioPontos(bx, segmentos, jitter);
+      const delay = (idx*0.5 + Math.random()*0.3).toFixed(2);
+      pathsHtml += `<path class="storm-bolt-path" style="--d:${delay}s" filter="url(#${boltFilterId})" d="${pontosParaPath(pontos)}"/>`;
+      if(Math.random()<0.75){
+        const dBranch = gerarRamoRaio(pontos);
+        if(dBranch) pathsHtml += `<path class="storm-bolt-branch" style="--d:${delay}s" filter="url(#${boltFilterId})" d="${dBranch}"/>`;
+      }
+    });
+    stormBolts = `
+      <svg class="storm-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <filter id="${boltFilterId}" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="2.4" result="blurGrande"/>
+            <feGaussianBlur in="SourceGraphic" stdDeviation="0.6" result="blurFino"/>
+            <feMerge>
+              <feMergeNode in="blurGrande"/>
+              <feMergeNode in="blurFino"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        ${pathsHtml}
+      </svg>
+    `;
+  }
+
+  // Easter egg: o Fernando ganha pétalas de cerejeira caindo pelo card dele,
+  // sempre que o card aparece — sem condição de horário, é só um detalhe
+  // bonito. Cada pétala é um SVG (forma de pétala de verdade, com uma
+  // nervura central), com posição, tom, tamanho, velocidade e atraso
+  // aleatórios a cada renderização, pra nunca cair exatamente igual — e cai
+  // rápido, tipo vento forte de primavera no Japão.
+  const ehFernando = f.nome.trim().toLowerCase()==='fernando';
+  let sakuraOverlay = '';
+  if(ehFernando){
+    const tonsPetala = ['#ffb7d1','#ff9dc4','#ffd6e8','#ff8fc0','#ffc2dd'];
+    let petalsHtml = '';
+    const qtdPetalas = 9;
+    for(let p=0; p<qtdPetalas; p++){
+      const x = (Math.random()*90).toFixed(1);
+      const tamanho = (7 + Math.random()*6).toFixed(1);
+      const duracao = (1.5 + Math.random()*1.3).toFixed(2); // queda rápida
+      const atraso = (Math.random()*2.5).toFixed(2);
+      const cor = tonsPetala[Math.floor(Math.random()*tonsPetala.length)];
+      petalsHtml += `<span class="sakura-petal" style="--x:${x}%;--size:${tamanho}px;--dur:${duracao}s;--d:${atraso}s;">
+        <svg viewBox="0 0 12 16" width="100%" height="100%">
+          <path d="M6,0.5 C9,2.2 11,5.8 9.6,9.5 C8.6,12.4 6.8,14.6 6,16 C5.2,14.6 3.4,12.4 2.4,9.5 C1,5.8 3,2.2 6,0.5 Z" fill="${cor}"/>
+          <path d="M6,2.2 L6,13.6" stroke="rgba(255,255,255,.4)" stroke-width="0.5"/>
+        </svg>
+      </span>`;
+    }
+    sakuraOverlay = `<div class="sakura-overlay" aria-hidden="true">${petalsHtml}</div>`;
+  }
+
+  return `<div class="func-card ${f.freelance?'free':''}" data-func-nome="${escapeHTML(f.nome.toLowerCase())}" data-func-status="${status}">
+    ${stormBolts}
+    ${sakuraOverlay}
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+      <div style="min-width:0;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ${statusDot}
+          <span class="func-name">${escapeHTML(f.nome)}</span>
+          <div class="func-turno-row" style="margin-top:0;">${turnosHtml}</div>
+          ${f.freelance?'<span class="pill pill-free">Freelance</span>':''}
+        </div>
+        ${consumoHtml}${pag}${obs}
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button onclick="${ctx==='edit'?'eEditFunc':'editFunc'}(${i})" class="btn btn-gray" style="padding:4px 8px;font-size:11px;">✏️</button>
+        <button onclick="${ctx==='edit'?'eRemFunc':'remFunc'}(${i})" class="btn btn-red" style="padding:4px 8px;font-size:11px;">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+function toggleCalcDias(ctx,i){
+  const el = document.getElementById(`calc-days-${ctx}-${i}`);
+  if(!el) return;
+  el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+
+// Renderiza a lista de funcionários (busca + agrupamento por status) para
+// qualquer um dos dois contextos. Usado tanto pela tela "Anotar" de hoje
+// quanto pela tela de edição de um dia antigo via Histórico.
+function _renderFuncList(listId, searchId, arr, ctx){
+  const el=document.getElementById(listId);
+  if(!el) return;
+  if(!arr.length){el.innerHTML='<div class="empty">Nenhum funcionário ainda.</div>';return;}
+
+  const termo = (document.getElementById(searchId)?.value || '').trim().toLowerCase();
+  const comIdx = arr.map((f,i)=>({f,i})).filter(({f})=>!termo || f.nome.toLowerCase().includes(termo));
+
+  if(!comIdx.length){ el.innerHTML='<div class="empty">Nenhum funcionário encontrado para "'+escapeHTML(termo)+'".</div>'; return; }
+
+  const presentes = comIdx.filter(({f})=>funcStatus(f)==='presente');
+  const indefinidos = comIdx.filter(({f})=>funcStatus(f)==='indefinido');
+  const saidos = comIdx.filter(({f})=>funcStatus(f)==='saiu');
+  const consumo = comIdx.filter(({f})=>funcStatus(f)==='consumo');
+  const calculos = comIdx.filter(({f})=>funcStatus(f)==='calculo');
+
+  let html='';
+  if(presentes.length || indefinidos.length){
+    html+=`<div class="func-group-label">🟢 Ainda no trabalho (${presentes.length+indefinidos.length})</div>`;
+    html+=[...presentes,...indefinidos].map(({f,i})=>funcCard(f,i,ctx)).join('');
+  }
+  if(saidos.length){
+    html+=`<div class="func-group-label">⚪ Já saíram (${saidos.length})</div>`;
+    html+=saidos.map(({f,i})=>funcCard(f,i,ctx)).join('');
+  }
+  if(calculos.length){
+    html+=`<div class="func-group-label">🧮 Cálculo de horas (${calculos.length})</div>`;
+    html+=calculos.map(({f,i})=>funcCard(f,i,ctx)).join('');
+  }
+  if(consumo.length){
+    html+=`<div class="func-group-label">🍕 Só consumo (${consumo.length})</div>`;
+    html+=consumo.map(({f,i})=>funcCard(f,i,ctx)).join('');
+  }
+  el.innerHTML=html;
+}
+function renderFunc(){ state = normalizeState(state); _renderFuncList('func-list','func-search', state.funcionarios, 'main'); }
+// Termo digitado na barra de busca da barra de abas — usado por TODAS as
+// seções do relatório de hoje (funcionários, vendas, despesas, anotações,
+// moto fixo), não só funcionários. Vazio = mostra tudo normalmente.
+function termoBuscaGlobal(){
+  return (document.getElementById('func-search')?.value || '').trim().toLowerCase();
+}
+function filtrarFunc(){ renderFunc(); renderVendas(); renderDesp(); renderDevia(); renderEntregadores(); }
+
+// Ao apertar Enter na busca, sobe/desce a página sozinha até o primeiro
+// resultado encontrado — em qualquer seção (Funcionários, Moto Fixo, Vendas,
+// Despesas ou Anotações) — sem precisar rolar manualmente pra achar.
+function irParaResultadoBusca(){
+  if(!document.getElementById('tab-anotar')) return;
+  switchTab('anotar');
+  const listasEmOrdem = ['func-list','entreg-list','vendas-list','desp-list','devia-list'];
+  for(const id of listasEmOrdem){
+    const lista = document.getElementById(id);
+    if(!lista) continue;
+    const alvo = lista.querySelector('.func-card, .item-card, .devia-card');
+    if(alvo){ alvo.scrollIntoView({behavior:'smooth', block:'center'}); return; }
+  }
+}
+
+function remFunc(i){const f=state.funcionarios[i];if(!confirm(`Excluir "${f?f.nome:'este funcionário'}"?`))return;state.funcionarios.splice(i,1);renderFunc();save();}
+function editFunc(i){
+  const f=state.funcionarios[i];
+  if(f && f.fromCalc){ abrirEditarCalculo(f.calcId); return; }
+  _openModalFunc(i,'main',f);
+}
+
+function eRenderFunc(){ editState = normalizeState(editState); _renderFuncList('efunc-list','efunc-search', editState.funcionarios, 'edit'); }
+function eFiltrarFunc(){ eRenderFunc(); }
+function eRemFunc(i){const f=editState.funcionarios[i];if(!confirm(`Excluir "${f?f.nome:'este funcionário'}"?`))return;editState.funcionarios.splice(i,1);eRenderFunc();editSave();}
+function eEditFunc(i){
+  const f=editState.funcionarios[i];
+  if(f && f.fromCalc){ abrirEditarCalculo(f.calcId); return; }
+  _openModalFunc(i,'edit',f);
+}
+
+
+function abrirModalFunc(free){_openModalFunc(-1,'main',null,free);}
+function eAbrirModalFunc(free){_openModalFunc(-1,'edit',null,free);}
+
+function _openModalFunc(idx,ctx,f,forceFreelance){
+  funcIsFreelance = f?f.freelance:!!forceFreelance;
+  document.getElementById('mf-idx').value=idx;
+  document.getElementById('mf-ctx').value=ctx;
+  document.getElementById('mf-title').textContent=funcIsFreelance?(idx>=0?'Editar Freelance':'Adicionar Freelance'):(idx>=0?'Editar Funcionário':'Adicionar Funcionário');
+  document.getElementById('mf-free-fields').style.display=funcIsFreelance?'block':'none';
+  montarSelectNome(f?f.nome||'':'');
+  document.getElementById('mf-consumo').value=f?f.consumo||'':'';
+  document.getElementById('mf-obs').value=f?f.obs||'':'';
+  setMoneyField('mf-vlrh', f?f.vlrHora:'');
+  setMoneyField('mf-total', f?f.totalPago:'');
+  document.getElementById('mf-calc').textContent='';
+  document.getElementById('mf-turnos').innerHTML='';
+  turnoForms=[];
+  const turnos=f&&f.turnos&&f.turnos.length?f.turnos:[{ent:'',sai:''}];
+  turnos.forEach(t=>turnoForms.push({ent:t.ent||'',sai:t.sai||''}));
+  redesenharTurnos();
+  if(f) calcFree();
+  abrirModal('modal-func');
+}
+
+// Monta o dropdown de nomes a partir da equipe cadastrada em Configurações.
+// - Se há equipe cadastrada: mostra a lista + "Outro (digitar)".
+// - Se NÃO há equipe (ainda não configurou): cai direto no campo de texto,
+//   pra nunca travar o uso.
+// - Freelance sempre pode digitar (nome livre), então também usa texto.
+// valorAtual: nome do funcionário sendo editado (pra pré-selecionar).
+function montarSelectNome(valorAtual){
+  const sel = document.getElementById('mf-nome-select');
+  const inp = document.getElementById('mf-nome');
+  const equipe = getEquipe();
+
+  // Freelance ou sem equipe cadastrada -> só texto livre
+  if(funcIsFreelance || !equipe.length){
+    sel.style.display='none';
+    inp.style.display='block';
+    inp.value = valorAtual||'';
+    setTimeout(()=>inp.focus(),50);
+    return;
+  }
+
+  sel.style.display='block';
+  let opts = '<option value="">— escolha o nome —</option>';
+  equipe.forEach(n=>{ opts += `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`; });
+  opts += '<option value="__outro__">Outro (digitar)…</option>';
+  sel.innerHTML = opts;
+
+  // Pré-seleciona: se o nome atual está na lista, seleciona; senão, se tem
+  // valor (ex: nome antigo que não está na equipe), usa "Outro" + texto.
+  if(valorAtual && equipe.some(n=>n===valorAtual)){
+    sel.value = valorAtual;
+    inp.style.display='none';
+    inp.value = valorAtual;
+  } else if(valorAtual){
+    sel.value = '__outro__';
+    inp.style.display='block';
+    inp.value = valorAtual;
+  } else {
+    sel.value = '';
+    inp.style.display='none';
+    inp.value = '';
+  }
+}
+
+// Quando escolhe no dropdown: "Outro" revela o campo de texto; um nome normal
+// preenche o valor direto.
+function onNomeSelectChange(){
+  const sel = document.getElementById('mf-nome-select');
+  const inp = document.getElementById('mf-nome');
+  if(sel.value==='__outro__'){
+    inp.style.display='block';
+    inp.value='';
+    setTimeout(()=>inp.focus(),30);
+  } else {
+    inp.style.display='none';
+    inp.value = sel.value;
+  }
+}
+
+
+// Adiciona um turno ao formulário. Cada turno tem entrada, saída e um botão
+// de excluir só dele. Como excluir um turno do meio bagunçaria os índices
+// fixos, ao adicionar/remover a lista inteira é reconstruída a partir dos
+// valores atuais (lerTurnosDoForm) — assim os ids ficam sempre 0..N certinho.
+function addTurnoForm(ent='',sai=''){
+  turnoForms.push({ent,sai});
+  redesenharTurnos();
+}
+// Lê o que está digitado agora em cada linha de turno (antes de redesenhar,
+// pra não perder o que a pessoa acabou de digitar).
+function lerTurnosDoForm(){
+  return turnoForms.map((_,i)=>({
+    ent:(document.getElementById(`tf-ent-${i}`)||{}).value||'',
+    sai:(document.getElementById(`tf-sai-${i}`)||{}).value||''
+  }));
+}
+function redesenharTurnos(){
+  const cont=document.getElementById('mf-turnos');
+  if(!cont) return;
+  cont.innerHTML='';
+  turnoForms.forEach((t,idx)=>{
+    const div=document.createElement('div');
+    div.style.display='flex';div.style.gap='6px';div.style.alignItems='flex-end';div.style.marginBottom='8px';
+    div.innerHTML=`
+      <div class="fg" style="flex:1;"><label>Entrada ${idx+1}</label><input type="time" id="tf-ent-${idx}" value="${t.ent||''}" oninput="calcFree()"/></div>
+      <div class="fg" style="flex:1;"><label>Saída ${idx+1}</label><input type="time" id="tf-sai-${idx}" value="${t.sai||''}" oninput="calcFree()"/></div>
+      <button type="button" class="btn btn-red" style="padding:8px 10px;" title="Excluir este turno" onclick="removerTurnoForm(${idx})">✕</button>`;
+    cont.appendChild(div);
+  });
+}
+// Exclui um turno específico. Salva o que está digitado, remove o índice
+// escolhido e redesenha. Sempre deixa pelo menos uma linha em branco.
+function removerTurnoForm(idx){
+  turnoForms = lerTurnosDoForm();
+  turnoForms.splice(idx,1);
+  if(!turnoForms.length) turnoForms.push({ent:'',sai:''});
+  redesenharTurnos();
+  calcFree();
+}
+
+function getTurnos(){return lerTurnosDoForm().filter(t=>t.ent||t.sai);}
+
+function calcHorasTurnos(turnos){
+  let total=0;
+  turnos.forEach(t=>{if(!t.ent||!t.sai)return;const[h1,m1]=t.ent.split(':').map(Number);const[h2,m2]=t.sai.split(':').map(Number);let mins=(h2*60+m2)-(h1*60+m1);if(mins<0)mins+=1440;total+=mins;});
+  if(!total)return null;const h=Math.floor(total/60),m=total%60;return{total:total/60,str:m>0?`${h}h${m}m`:`${h}h`};
+}
+
+function calcFree(){
+  const turnos=getTurnos();const horas=calcHorasTurnos(turnos);const vlr=parseMoney(document.getElementById('mf-vlrh').value)||0;const el=document.getElementById('mf-calc');
+  if(horas&&vlr>0){const total=horas.total*vlr;setMoneyField('mf-total', total.toFixed(2));el.textContent=`${horas.str} × R$ ${fmt(vlr)}/h = R$ ${fmt(total)}`;}else{el.textContent='';}
+}
+
+function salvarFunc(){
+  const nome=document.getElementById('mf-nome').value.trim();if(!nome){alert('Digite o nome.');return;}
+  const turnos=getTurnos();const consumo=document.getElementById('mf-consumo').value.trim();const obs=document.getElementById('mf-obs').value.trim();
+  const vlrHora=parseMoney(document.getElementById('mf-vlrh').value)||0;const totalPago=parseMoney(document.getElementById('mf-total').value)||0;const horas=calcHorasTurnos(turnos);
+  const reg={nome,turnos,consumo,obs,freelance:funcIsFreelance,vlrHora,totalPago,horasStr:horas?horas.str:'',horasTotal:horas?horas.total:0};
+  const idx=parseInt(document.getElementById('mf-idx').value);const ctx=document.getElementById('mf-ctx').value;
+  const arr=ctx==='edit'?editState.funcionarios:state.funcionarios;
+  if(idx>=0)arr[idx]=reg;else arr.push(reg);
+  fecharModal('modal-func');
+  if(ctx==='edit'){eRenderFunc();editSave();}else{renderFunc();save();}
+}
+
+// ===== VENDAS / DESPESAS =====
+function itemCard(it,i,tipo,ctx){
+  const cor = tipo==='venda'?'var(--green)':'var(--red)';
+  // Valor à esquerda, descrição logo ao lado (mesma linha, separados por um
+  // "-"), botões sempre no canto direito. Vendas e despesas com a mesma cara.
+  return `<div class="item-card">
+    <div class="item-left">
+      <div class="item-desc"><span class="item-val" style="color:${cor};">R$ ${fmt(it.val)}</span> <span style="color:var(--muted);">-</span> ${escapeHTML(it.desc)}</div>
+    </div>
+    <div class="item-actions">
+      <button onclick="${ctx==='edit'?'eEditItem':'editItem'}('${tipo}',${i})" class="btn btn-gray" style="padding:3px 7px;font-size:11px;">✏️</button>
+      <button onclick="${ctx==='edit'?'eRemItem':'remItem'}('${tipo}',${i})" class="btn btn-red" style="padding:3px 7px;font-size:11px;">✕</button>
+    </div>
+  </div>`;
+}
+
+function renderVendas(){_renderItems('vendas-list','vendas-total',state.vendas,'venda','main');}
+function renderDesp(){_renderItems('desp-list','desp-total',state.despesas,'despesa','main');}
+function eRenderVendas(){_renderItems('evendas-list','evendas-total',editState.vendas,'venda','edit');}
+function eRenderDesp(){_renderItems('edesp-list','edesp-total',editState.despesas,'despesa','edit');}
+
+function _renderItems(listId,totId,arr,tipo,ctx){
+  const el=document.getElementById(listId);const tot=document.getElementById(totId);
+  if(!arr||!arr.length){el.innerHTML=`<div class="empty">Nenhum${tipo==='venda'?'a venda':' despesa'} ainda.</div>`;if(tot)tot.style.display='none';return;}
+  const termo = ctx==='main' ? termoBuscaGlobal() : '';
+  const comIdx = arr.map((it,i)=>({it,i})).filter(({it})=> !termo || (it.desc||'').toLowerCase().includes(termo));
+  if(!comIdx.length){
+    el.innerHTML = termo ? `<div class="empty">Nenhum resultado para "${escapeHTML(termo)}".</div>` : `<div class="empty">Nenhum${tipo==='venda'?'a venda':' despesa'} ainda.</div>`;
+    if(tot)tot.style.display='none';
+    return;
+  }
+  el.innerHTML=comIdx.map(({it,i})=>itemCard(it,i,tipo,ctx)).join('');
+  // Total sempre reflete o dia inteiro, não só o que está filtrado na busca.
+  const total=arr.reduce((s,v)=>s+v.val,0);
+  if(tot){tot.style.display='block';tot.innerHTML=`<div class="total-box"><span>Total ${tipo==='venda'?'vendas':'despesas'}</span><span style="color:${tipo==='venda'?'var(--green)':'var(--red)'};">R$ ${fmt(total)}</span></div>`;}
+}
+
+function abrirModalItem(tipo){_openModalItem(-1,'main',tipo,null);}
+function editItem(tipo,i){_openModalItem(i,'main',tipo,tipo==='venda'?state.vendas[i]:state.despesas[i]);}
+function eAbrirModalItem(tipo){_openModalItem(-1,'edit',tipo,null);}
+function eEditItem(tipo,i){_openModalItem(i,'edit',tipo,tipo==='venda'?editState.vendas[i]:editState.despesas[i]);}
+
+function _openModalItem(idx,ctx,tipo,it){
+  document.getElementById('mi-tipo').value=tipo;document.getElementById('mi-idx').value=idx;document.getElementById('mi-ctx').value=ctx;
+  document.getElementById('mi-title').textContent=tipo==='venda'?(idx>=0?'Editar Venda':'Adicionar Venda'):(idx>=0?'Editar Despesa':'Adicionar Despesa');
+  setMoneyField('mi-val', it?it.val:'');document.getElementById('mi-desc').value=it?it.desc||'':'';
+  abrirModal('modal-item');
+}
+
+function salvarItem(){
+  const tipo=document.getElementById('mi-tipo').value;const val=parseMoney(document.getElementById('mi-val').value);const desc=document.getElementById('mi-desc').value.trim();const ctx=document.getElementById('mi-ctx').value;
+  if(isNaN(val)||!desc){alert('Preencha valor e descrição.');return;}
+  const reg={val,desc};const idx=parseInt(document.getElementById('mi-idx').value);
+  const arr=ctx==='edit'?(tipo==='venda'?editState.vendas:editState.despesas):(tipo==='venda'?state.vendas:state.despesas);
+  if(idx>=0)arr[idx]=reg;else arr.push(reg);
+  fecharModal('modal-item');
+  if(ctx==='edit'){tipo==='venda'?eRenderVendas():eRenderDesp();editSave();}else{tipo==='venda'?renderVendas():renderDesp();save();}
+}
+
+function remItem(tipo,i){const it=tipo==='venda'?state.vendas[i]:state.despesas[i];if(!confirm(`Excluir "${it?it.desc:'este item'}"?`))return;if(tipo==='venda')state.vendas.splice(i,1);else state.despesas.splice(i,1);tipo==='venda'?renderVendas():renderDesp();save();}
+function eRemItem(tipo,i){const it=tipo==='venda'?editState.vendas[i]:editState.despesas[i];if(!confirm(`Excluir "${it?it.desc:'este item'}"?`))return;if(tipo==='venda')editState.vendas.splice(i,1);else editState.despesas.splice(i,1);tipo==='venda'?eRenderVendas():eRenderDesp();editSave();}
+
+// ===== DEVIAS (Devemos / Devem) =====
+function deviaCard(d,i,ctx){
+  const ehDevem = d.tipo==='devem';
+  return `<div class="devia-card ${ehDevem?'devem':''}">
+    <div>
+      <div style="font-weight:700;font-size:12px;line-height:1.4;white-space:pre-line;">${escapeHTML(d.nome)}</div>
+      ${d.val?`<div style="color:${ehDevem?'var(--red)':'var(--green)'};font-size:12px;font-weight:600;margin-top:1px;">R$ ${fmt(d.val)}</div>`:''}
+      ${d.det?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">${escapeHTML(d.det)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:4px;flex-shrink:0;">
+      <button onclick="${ctx==='edit'?'eEditDevia':'editDevia'}(${i})" class="btn btn-gray" style="padding:2px 6px;font-size:10px;">✏️</button>
+      <button onclick="${ctx==='edit'?'eRemDevia':'remDevia'}(${i})" class="btn btn-red" style="padding:2px 6px;font-size:10px;">✕</button>
+    </div>
+  </div>`;
+}
+
+// Renderiza UMA categoria (devemos ou devem) numa lista própria — cada uma
+// mora no seu próprio card agora, não mais agrupadas dentro de um só.
+function _renderDeviaList(listId, arr, termo, tipoAlvo){
+  const el=document.getElementById(listId);
+  if(!el) return;
+  const ctx = (listId==='edevia-list'||listId==='edevem-list')?'edit':'main';
+  const comIdx = arr.map((d,i)=>({d,i}))
+    .filter(({d})=>(d.tipo||'devemos')===tipoAlvo)
+    .filter(({d})=> !termo || (d.nome||'').toLowerCase().includes(termo) || (d.det||'').toLowerCase().includes(termo));
+  if(!comIdx.length){
+    el.innerHTML = termo ? `<div class="empty">Nenhum resultado para "${escapeHTML(termo)}".</div>` : '<div class="empty">Nada aqui ainda.</div>';
+    return;
+  }
+  el.innerHTML=comIdx.map(({d,i})=>deviaCard(d,i,ctx)).join('');
+}
+function renderDevia(){
+  state = normalizeState(state);
+  const termo = termoBuscaGlobal();
+  _renderDeviaList('devia-list', state.devias, termo, 'devemos');
+  _renderDeviaList('devem-list', state.devias, termo, 'devem');
+}
+function eRenderDevia(){
+  editState = normalizeState(editState);
+  _renderDeviaList('edevia-list', editState.devias, '', 'devemos');
+  _renderDeviaList('edevem-list', editState.devias, '', 'devem');
+}
+
+// ===== PIZZAS IFOOD =====
+const PIZ_LABELS = { p:'Pequena', m:'Média', g:'Grande', gg:'Gigante' };
+function _renderPizzasBox(elId, st, ctx){
+  const el=document.getElementById(elId);
+  if(!el) return;
+  const pz = st.pizzas;
+  const total = (pz.p||0)+(pz.m||0)+(pz.g||0)+(pz.gg||0);
+  const fnAjustar = ctx==='edit' ? 'eAjustarPizza' : 'ajustarPizza';
+  const fnDefinir = ctx==='edit' ? 'eDefinirPizza' : 'definirPizza';
+  el.innerHTML = `<div class="piz-grid">
+    ${Object.keys(PIZ_LABELS).map(k=>`
+      <div class="piz-box">
+        <span class="piz-box-label">${PIZ_LABELS[k]}</span>
+        <div class="piz-ctrl">
+          <button class="piz-btn minus" onclick="${fnAjustar}('${k}',-1)">−</button>
+          <input class="piz-val" type="number" min="0" step="1" inputmode="numeric" value="${pz[k]||0}"
+                 onchange="${fnDefinir}('${k}',this.value)"
+                 onfocus="this.select()"/>
+          <button class="piz-btn plus" onclick="${fnAjustar}('${k}',1)">+</button>
+        </div>
+      </div>`).join('')}
+  </div>
+  <div class="piz-total"><span>Total de pizzas iFood</span><span>${total}</span></div>`;
+}
+function renderPizzas(){ state = normalizeState(state); _renderPizzasBox('piz-box', state, 'main'); }
+function ajustarPizza(tipo, delta){
+  state = normalizeState(state);
+  const novo = (state.pizzas[tipo]||0) + delta;
+  state.pizzas[tipo] = novo < 0 ? 0 : novo;
+  renderPizzas();
+  save();
+}
+function definirPizza(tipo, valor){
+  state = normalizeState(state);
+  let n = parseInt(valor, 10);
+  if(isNaN(n) || n < 0) n = 0;
+  state.pizzas[tipo] = n;
+  renderPizzas();
+  save();
+}
+
+function eRenderPizzas(){ editState = normalizeState(editState); _renderPizzasBox('epiz-box', editState, 'edit'); }
+function eAjustarPizza(tipo, delta){
+  editState = normalizeState(editState);
+  const novo = (editState.pizzas[tipo]||0) + delta;
+  editState.pizzas[tipo] = novo < 0 ? 0 : novo;
+  eRenderPizzas();
+  editSave();
+}
+function eDefinirPizza(tipo, valor){
+  editState = normalizeState(editState);
+  let n = parseInt(valor, 10);
+  if(isNaN(n) || n < 0) n = 0;
+  editState.pizzas[tipo] = n;
+  eRenderPizzas();
+  editSave();
+}
+
+
+function abrirModalDevia(tipoInicial){_openModalDevia(-1,'main',null,tipoInicial);}
+function editDevia(i){_openModalDevia(i,'main',state.devias[i]);}
+function eAbrirModalDevia(tipoInicial){_openModalDevia(-1,'edit',null,tipoInicial);}
+function eEditDevia(i){_openModalDevia(i,'edit',editState.devias[i]);}
+
+function _openModalDevia(idx,ctx,d,tipoInicial){
+  document.getElementById('md-idx').value=idx;document.getElementById('md-ctx').value=ctx;
+  document.getElementById('md-nome').value=d?d.nome||'':'';setMoneyField('md-val', d?d.val:'');
+  // Ao editar: usa o tipo do próprio registro. Ao adicionar: usa o tipo do
+  // card que abriu o modal (Devemos ou Devem). O usuário ainda pode trocar
+  // no formulário se quiser.
+  selecionarTipoDevia(d?(d.tipo||'devemos'):(tipoInicial||'devemos'));
+  abrirModal('modal-devia');
+}
+// Alterna a categoria escolhida (Devemos = a pizzaria deve pagar; Devem =
+// devem pra pizzaria), guardando em campo oculto e destacando o botão ativo.
+function selecionarTipoDevia(tipo){
+  document.getElementById('md-tipo').value=tipo;
+  document.getElementById('md-tipo-btn-devemos').className='btn '+(tipo==='devemos'?'btn-copy':'btn-gray');
+  document.getElementById('md-tipo-btn-devem').className='btn '+(tipo==='devem'?'btn-red':'btn-gray');
+}
+
+function salvarDevia(){
+  const nome=document.getElementById('md-nome').value.trim();if(!nome){alert('Digite o nome.');return;}
+  const val=parseMoney(document.getElementById('md-val').value)||0;const ctx=document.getElementById('md-ctx').value;
+  const tipo=document.getElementById('md-tipo').value||'devemos';
+  const idx=parseInt(document.getElementById('md-idx').value);
+  const arr=ctx==='edit'?editState.devias:state.devias;
+  const detExistente = (idx>=0 && arr[idx]) ? (arr[idx].det||'') : '';
+  const reg={nome,val,tipo,det:detExistente};
+  if(idx>=0)arr[idx]=reg;else arr.push(reg);
+  fecharModal('modal-devia');
+  if(ctx==='edit'){eRenderDevia();editSave();}else{renderDevia();save();}
+}
+
+function remDevia(i){const d=state.devias[i];if(!confirm(`Excluir "${d?d.nome:'esta anotação'}"?`))return;state.devias.splice(i,1);renderDevia();save();}
+function eRemDevia(i){const d=editState.devias[i];if(!confirm(`Excluir "${d?d.nome:'esta anotação'}"?`))return;editState.devias.splice(i,1);eRenderDevia();editSave();}
+
+// ===== ENTREGADORES (Moto Fixo) =====
+// Card com nome, horário (chegou/saiu), quantidade de entregas, total da
+// taxa, maquininha e valor em dinheiro (esse último é só conferência
+// interna — nunca entra no texto copiado, que segue o padrão de planilha:
+// DATA | MOTOBOY | QTD | TAXA | HORÁRIO).
+function horarioEntregadorTexto(e){
+  if(e.ent && e.sai) return `${e.ent} até ${e.sai}`;
+  if(e.ent) return `${e.ent} até agora`;
+  return '';
+}
+function entregadorCard(e,i,ctx){
+  const horario = horarioEntregadorTexto(e);
+  return `<div class="item-card" style="align-items:flex-start;">
+    <div class="item-left" style="min-width:0;">
+      <div class="item-desc" style="font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(e.nome)}</div>
+      ${horario?`<div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;">${horario}</div>`:''}
+      <div style="font-size:11px;color:var(--text);margin-top:3px;">${e.qtd||0}x &nbsp;·&nbsp; R$ ${fmt(e.taxa)}</div>
+      ${e.maquininha?`<div style="font-size:11px;color:var(--text);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHTML(e.maquininha)}</div>`:''}
+      <div style="font-size:11px;color:var(--purple);margin-top:2px;">Interno: R$ ${fmt(e.dinheiro)}</div>
+    </div>
+    <div class="item-actions" style="flex-direction:column;">
+      <button onclick="${ctx==='edit'?'eEditEntregador':'editEntregador'}(${i})" class="btn btn-gray" style="padding:3px 7px;font-size:11px;">✏️</button>
+      <button onclick="${ctx==='edit'?'eRemEntregador':'remEntregador'}(${i})" class="btn btn-red" style="padding:3px 7px;font-size:11px;">✕</button>
+    </div>
+  </div>`;
+}
+function _renderEntregList(listId, arr, ctx){
+  const el=document.getElementById(listId);
+  if(!el) return;
+  if(!arr||!arr.length){ el.innerHTML='<div class="empty">Nenhum moto fixo ainda.</div>'; return; }
+  const termo = ctx==='main' ? termoBuscaGlobal() : '';
+  const comIdx = arr.map((e,i)=>({e,i})).filter(({e})=> !termo || (e.nome||'').toLowerCase().includes(termo) || (e.maquininha||'').toLowerCase().includes(termo));
+  if(!comIdx.length){
+    el.innerHTML = termo ? `<div class="empty">Nenhum resultado para "${escapeHTML(termo)}".</div>` : '<div class="empty">Nenhum moto fixo ainda.</div>';
+    return;
+  }
+  el.innerHTML = comIdx.map(({e,i})=>entregadorCard(e,i,ctx)).join('');
+}
+function renderEntregadores(){ state = normalizeState(state); _renderEntregList('entreg-list', state.entregadores, 'main'); }
+function eRenderEntregadores(){ editState = normalizeState(editState); _renderEntregList('eentreg-list', editState.entregadores, 'edit'); }
+
+function abrirModalEntregador(){_openModalEntregador(-1,'main',null);}
+function editEntregador(i){_openModalEntregador(i,'main',state.entregadores[i]);}
+function eAbrirModalEntregador(){_openModalEntregador(-1,'edit',null);}
+function eEditEntregador(i){_openModalEntregador(i,'edit',editState.entregadores[i]);}
+
+function _openModalEntregador(idx,ctx,e){
+  document.getElementById('me-idx').value=idx;
+  document.getElementById('me-ctx').value=ctx;
+  document.getElementById('me-title').textContent=idx>=0?'Editar Moto Fixo':'Adicionar Moto Fixo';
+  document.getElementById('me-nome').value=e?e.nome||'':'';
+  document.getElementById('me-ent').value=e?e.ent||'':'';
+  document.getElementById('me-sai').value=e?e.sai||'':'';
+  document.getElementById('me-qtd').value=e?e.qtd||'':'';
+  setMoneyField('me-taxa', e?e.taxa:'');
+  document.getElementById('me-maquininha').value=e?e.maquininha||'':'';
+  setMoneyField('me-dinheiro', e?e.dinheiro:'');
+  abrirModal('modal-entregador');
+}
+
+function salvarEntregador(){
+  const nome=document.getElementById('me-nome').value.trim();
+  if(!nome){ alert('Digite o nome do entregador.'); return; }
+  const ent=document.getElementById('me-ent').value;
+  const sai=document.getElementById('me-sai').value;
+  const qtd=parseInt(document.getElementById('me-qtd').value,10)||0;
+  const taxa=parseMoney(document.getElementById('me-taxa').value)||0;
+  const maquininha=document.getElementById('me-maquininha').value.trim();
+  const dinheiro=parseMoney(document.getElementById('me-dinheiro').value)||0;
+  const reg={nome,ent,sai,qtd,taxa,maquininha,dinheiro};
+  const idx=parseInt(document.getElementById('me-idx').value);
+  const ctx=document.getElementById('me-ctx').value;
+  const arr=ctx==='edit'?editState.entregadores:state.entregadores;
+  if(idx>=0)arr[idx]=reg;else arr.push(reg);
+  fecharModal('modal-entregador');
+  if(ctx==='edit'){eRenderEntregadores();editSave();}else{renderEntregadores();save();}
+}
+
+function remEntregador(i){const e=state.entregadores[i];if(!confirm(`Excluir "${e?e.nome:'este moto fixo'}"?`))return;state.entregadores.splice(i,1);renderEntregadores();save();}
+function eRemEntregador(i){const e=editState.entregadores[i];if(!confirm(`Excluir "${e?e.nome:'este moto fixo'}"?`))return;editState.entregadores.splice(i,1);eRenderEntregadores();editSave();}
+
+// Data no formato "DD/MM" — igual à coluna DATA da planilha de referência.
+function diaMes(dateKey){
+  if(!dateKey) return '';
+  const partes = dateKey.split('-');
+  if(partes.length<3) return '';
+  const [, m, d] = partes;
+  return `${d}/${m}`;
+}
+// Número "limpo" (sem formatação de moeda, sem separador de milhar) — é
+// assim que a coluna VALOR EM TAXAS aparece na planilha de referência
+// (ex: "66.5", não "R$ 66,50"), pronto pra colar numa célula e já funcionar
+// como número.
+function numeroLimpoPlanilha(n){
+  const v = parseFloat(n)||0;
+  return String(v);
+}
+function _gerarTextoEntregadores(arr, dateKey){
+  const dataFmt = diaMes(dateKey || todayStr());
+  let txt = 'DATA\tMOTOBOY\tQUANTIDADE DE ENTREGAS\tVALOR EM TAXAS\tHORÁRIO\n';
+  arr.forEach(e=>{
+    txt += `${dataFmt}\t${(e.nome||'').toUpperCase()}\t${e.qtd||0}\t${numeroLimpoPlanilha(e.taxa)}\t${horarioEntregadorTexto(e)}\n`;
+  });
+  return txt.trim();
+}
+function copiarEntregadores(){
+  if(!state.entregadores.length){ alert('Nenhum moto fixo para copiar.'); return; }
+  copiar(_gerarTextoEntregadores(state.entregadores, currentDate));
+}
+function eCopiarEntregadores(){
+  if(!editState.entregadores.length){ alert('Nenhum moto fixo para copiar.'); return; }
+  copiar(_gerarTextoEntregadores(editState.entregadores, editDate));
+}
+
+// ===== GERAR TEXTO =====
+function gerarTexto(st,dk){
+  let txt=`*${fmtDate(dk)}*\n\n`;
+  txt+=`Caixa Inicial: ${st.cxIni?'R$ '+fmt(st.cxIni):''}\n`;
+  if(st.depositos&&st.depositos.length){
+    const total=st.depositos.reduce((s,d)=>s+parseFloat(d.val||0),0);
+    st.depositos.forEach(d=>{txt+=`Depósito: R$ ${fmt(d.val)}${d.quem?' - '+d.quem:''}\n`;});
+    if(st.depositos.length>1)txt+=`Total depósitos: R$ ${fmt(total)}\n`;
+  }
+  txt+=`Caixa Final: ${st.cxFin?'R$ '+fmt(st.cxFin):''}\n\n`;
+  if(st.funcionarios&&st.funcionarios.length){
+    st.funcionarios.forEach(f=>{
+      const turnos=(f.turnos||[]).filter(t=>t.ent||t.sai);
+      let linha=f.nome+': ';
+      if(f.fromCalc){
+        linha+=`🧮 cálculo de horas (${(f.calcDias||[]).length} dia(s))`;
+      } else if(turnos.length===1&&f.consumo){
+        linha+=`${turnos[0].ent} - ${f.consumo} - ${turnos[0].sai}`;
+      } else if(turnos.length>1&&f.consumo){
+        // Com múltiplos turnos, o consumo entra dentro do último turno, entre
+        // sua entrada e saída (ex: "10:00 - 12:05 | 14:20 - lata - 15:05"),
+        // nunca solto em parênteses depois de tudo.
+        const partes = turnos.slice(0,-1).map(t=>`${t.ent} - ${t.sai}`);
+        const ultimoTurno = turnos[turnos.length-1];
+        partes.push(`${ultimoTurno.ent} - ${f.consumo} - ${ultimoTurno.sai}`);
+        linha += partes.join(' | ');
+      } else if(turnos.length){
+        linha+=turnos.map(t=>`${t.ent} - ${t.sai}`).join(' | ');
+      } else if(!turnos.length && f.consumo){
+        // Sem horário nenhum mas com consumo: precisa aparecer o consumo mesmo
+        // assim — funcionário/pessoa não pode ter consumido algo e sumir do
+        // relatório sem cobrança/anotação (ex: André comeu uma pizza sem bater
+        // ponto). Sem horário para "encaixar" o consumo, ele entra direto.
+        linha+=f.consumo;
+      }
+      if(f.obs)linha+=` [${escapeHTML(f.obs)}]`;
+      if(f.freelance&&f.totalPago)linha+=` >>>>>>>> R$ ${fmt(f.totalPago)} Pago!!!!${f.horasStr?` (${f.horasStr})`:''}`;
+      txt+=linha+'\n';
+    });
+    txt+='\n';
+  }
+  if(st.vendas&&st.vendas.length){txt+='VENDAS:\n';st.vendas.forEach(v=>{txt+=`${fmt(v.val)} - ${v.desc}\n`;});txt+=`Total vendas: R$ ${fmt(st.vendas.reduce((s,v)=>s+v.val,0))}\n\n`;}
+  if(st.despesas&&st.despesas.length){txt+='DESPESAS:\n';st.despesas.forEach(d=>{txt+=`${fmt(d.val)} - ${d.desc}\n`;});txt+=`Total despesas: R$ ${fmt(st.despesas.reduce((s,d)=>s+d.val,0))}\n\n`;}
+  if(st.pizzas){
+    const pz=st.pizzas;const totalPz=(pz.p||0)+(pz.m||0)+(pz.g||0)+(pz.gg||0);
+    if(totalPz>0){
+      txt+=`PIZZAS PEQUENAS: ${pz.p||0}\nPIZZAS MEDIAS: ${pz.m||0}\nPIZZAS GRANDES: ${pz.g||0}\nPIZZAS GIGANTES: ${pz.gg||0}\nTotal de pizzas iFood: ${totalPz}\n\n`;
+    }
+  }
+  if(st.devias&&st.devias.length){
+    const linhaDevia=d=>d.nome+(d.val?` - R$ ${fmt(d.val)}`:'')+(d.det?` - ${escapeHTML(d.det)}`:'');
+    const devemos=st.devias.filter(d=>(d.tipo||'devemos')==='devemos');
+    const devem=st.devias.filter(d=>(d.tipo||'devemos')==='devem');
+    if(devemos.length){txt+='DEVEMOS:\n';devemos.forEach(d=>{txt+=linhaDevia(d)+'\n';});txt+='\n';}
+    if(devem.length){txt+='DEVEM:\n';devem.forEach(d=>{txt+=linhaDevia(d)+'\n';});}
+  }
+  return txt.trim();
+}
+
+// ===== IMPORTAR TEXTO COLADO =====
+let importParsed = null; // resultado da última análise, aguardando confirmação
+
+function abrirModalImport(){
+  document.getElementById('import-raw').value='';
+  document.getElementById('import-step-paste').style.display='block';
+  document.getElementById('import-step-preview').style.display='none';
+  importParsed=null;
+  abrirModal('modal-import');
+}
+function voltarImportPaste(){
+  document.getElementById('import-step-paste').style.display='block';
+  document.getElementById('import-step-preview').style.display='none';
+}
+
+function parseMoneyLoose(s){
+  if(s==null) return NaN;
+  let t=String(s).trim().replace(/^R\$\s*/i,'');
+  if(!t) return NaN;
+  t=t.replace(/\s/g,'');
+  if(t.includes(',')&&t.includes('.')) t=t.replace(/\./g,'').replace(',', '.');
+  else t=t.replace(',', '.');
+  const n=Number(t);
+  return isNaN(n)?NaN:n;
+}
+
+// Extrai todos os horários HH:MM (ou H:MM) de uma string, na ordem em que aparecem.
+function extrairHorarios(s){
+  const m = s.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g);
+  return m || [];
+}
+
+// "xx:xx" (e variações como "x:x", "XX:XX") — marcador que a funcionária usa
+// para "horário que eu não sei/não anotei direito", não um horário real.
+const RE_HORARIO_PLACEHOLDER = /^x{1,2}:x{1,2}$/i;
+// Marcador usado internamente para um horário que existe na linha mas é
+// ilegível — diferente de string vazia, que no resto do app já significa
+// "turno em aberto, ainda trabalhando" (ver funcCard). Sem essa distinção,
+// um "xx:xx" no meio do texto vira um "agora" falso.
+const MARCA_HORARIO_ILEGIVEL = '??';
+
+// Extrai os turnos de um "resto" (texto após "Nome:"), tratando cada trecho
+// separado por "|" como UM turno próprio, com até 2 "posições" de horário
+// (entrada e saída) separadas por "-". Isso é essencial quando a linha tem
+// marcadores "xx:xx" no meio: extrair todos os horários válidos da string
+// inteira e depois só emparelhar sequencialmente (par a par) desloca a
+// correspondência entrada/saída sempre que um "xx:xx" aparece no meio — ex:
+// "xx:xx - 10:20 | 12:35 - xx:xx | 15:40 -" tem 3 turnos reais (entrada
+// desconhecida→10:20, 12:35→saída desconhecida, 15:40→ainda), mas ao ignorar
+// os "xx:xx" e só parear os 3 números válidos que sobram (10:20, 12:35,
+// 15:40) o resultado vira 2 turnos errados (10:20→12:35, 15:40→agora).
+// Processando turno por turno (separado por "|"), a posição de cada horário
+// dentro do seu próprio turno nunca se perde.
+function extrairTurnosComPlaceholder(resto){
+  const segmentos = resto.split('|');
+  const turnos = [];
+  const consumoPartes = [];
+  let horarioIlegivel = false;
+  const reToken = /\b([01]?\d|2[0-3]):([0-5]\d)\b|\bx{1,2}:x{1,2}\b/gi;
+
+  segmentos.forEach(seg=>{
+    const tokens = seg.match(reToken) || [];
+    const slotVal = t => {
+      if(RE_HORARIO_PLACEHOLDER.test(t)){ horarioIlegivel = true; return MARCA_HORARIO_ILEGIVEL; }
+      return t;
+    };
+    if(tokens.length===1){
+      turnos.push({ent: slotVal(tokens[0]), sai:''});
+    } else if(tokens.length>=2){
+      turnos.push({ent: slotVal(tokens[0]), sai: slotVal(tokens[1])});
+    }
+    // o que sobrar no segmento fora dos horários (ex: "lata") vira consumo
+    let sobra = seg;
+    tokens.forEach(t=>{ sobra = sobra.replace(t,''); });
+    sobra = sobra.replace(/[-–]/g,' ').replace(/\s{2,}/g,' ').trim();
+    if(sobra) consumoPartes.push(sobra);
+  });
+
+  return { turnos, consumo: consumoPartes.join(' ').replace(/\s{2,}/g,' ').trim(), horarioIlegivel };
+}
+
+// ===== TRADUÇÃO / NORMALIZAÇÃO PT-BR (espanhol, castelhano, portunhol) =====
+// A pizzaria tem funcionária que escreve em espanhol/castelhano/portunhol.
+// Antes de qualquer outra análise do texto colado, normalizamos palavras-chave
+// conhecidas (cabeçalhos de seção e termos comuns) para o português esperado
+// pelo parser, sem mexer em nomes próprios nem em valores.
+const DIC_TRADUCAO_PTBR = [
+  // despesas / gastos
+  [/\bdespensas?\b/gi, 'despesas'],
+  [/\bgastos?\b/gi, 'despesas'],
+  [/\bgasto general\b/gi, 'despesas'],
+  // vendas
+  [/\bventas?\b/gi, 'vendas'],
+  [/\bvenda del dia\b/gi, 'vendas'],
+  // devemos / dívidas
+  [/\bdebemos\b/gi, 'devemos'],
+  [/\bdeuda(s)?\b/gi, 'devemos'],
+  [/\bdebe(mos)?\b/gi, 'deve'],
+  // caixa
+  [/\bcaja inicial\b/gi, 'caixa inicial'],
+  [/\bcaja final\b/gi, 'caixa final'],
+  [/\bcaja\b/gi, 'caixa'],
+  // depósito
+  [/\bdep[oó]sitos?\b/gi, 'depósito'],
+  // entregador / telefone
+  [/\brepartidor\b/gi, 'entregador'],
+  [/\btel[eé]fono\b/gi, 'telefone'],
+  // consumo comum em portunhol
+  [/\bconsumo\b/gi, 'consumo'],
+  [/\bagua\b/gi, 'água'],
+  [/\bcoca\b/gi, 'coca'],
+];
+function traduzirParaPtBr(raw){
+  let t = raw;
+  DIC_TRADUCAO_PTBR.forEach(([re, rep])=>{ t = t.replace(re, rep); });
+  return t;
+}
+
+// ===== SIMILARIDADE DE NOMES (para detectar duplicados com grafia diferente) =====
+// Normaliza removendo acentos/pontuação e aplicando equivalências fonéticas
+// comuns em nomes próprios no PT-BR (y≈i, consoantes duplicadas≈simples),
+// para que "Lydmar", "Lidimar", "Lydimar" e "Liddimar" caiam na mesma forma.
+function normalizaNome(s){
+  let n = String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
+  n = n.replace(/y/g, 'i');
+  n = n.replace(/([a-z])\1+/g, '$1');
+  return n;
+}
+function levenshtein(a, b){
+  const m=a.length, n=b.length;
+  if(m===0) return n;
+  if(n===0) return m;
+  const dp = Array.from({length:m+1}, ()=>new Array(n+1).fill(0));
+  for(let i=0;i<=m;i++) dp[i][0]=i;
+  for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    }
+  }
+  return dp[m][n];
+}
+// Retorna um valor de 0 a 1 (1 = nomes idênticos depois de normalizados).
+// Limiar de 0.80 cobre variações reais (Lydmar/Lidimar/Lydimar/Liddimar,
+// Barbara/Bárbara, Hellen/Hellem, Romeo/Romel) sem confundir nomes diferentes
+// parecidos (Antonio/Anthony fica em ~0.71, abaixo do limiar).
+function similaridadeNomes(a, b){
+  const na = normalizaNome(a), nb = normalizaNome(b);
+  if(!na || !nb) return 0;
+  if(na===nb) return 1;
+  const dist = levenshtein(na, nb);
+  const maxLen = Math.max(na.length, nb.length);
+  return 1 - dist/maxLen;
+}
+const LIMIAR_SIMILARIDADE_NOME = 0.80;
+
+// ===== CABEÇALHOS DE SEÇÃO COM ERRO ORTOGRÁFICO =====
+// A funcionária que digita esses relatórios comete bastante erro de escrita
+// ("depisas", "depesas", "despensas" em vez de "despesas"). Em vez de tentar
+// listar cada erro possível manualmente, comparamos a linha (já sem números,
+// pontuação e acentos) contra as palavras-chave conhecidas usando a mesma
+// medida de similaridade usada para nomes de funcionário — assim qualquer
+// erro de digitação plausível (trocar, faltar ou repetir 1-2 letras) ainda
+// é reconhecido como o cabeçalho pretendido, sem exigir grafia exata.
+const LIMIAR_SIMILARIDADE_HEADER = 0.72;
+const HEADERS_FUZZY = [
+  { sec:'vendas',   palavras:['vendas','venda'] },
+  { sec:'despesas', palavras:['despesas','despesa'] },
+  { sec:'devemos',  palavras:['devemos','anotacoes','anotações','dividas','devendo'] },
+];
+function detectarHeaderFuzzy(linha){
+  const bruta = linha.trim();
+  if(!bruta || bruta.length>20) return null; // cabeçalhos são linhas curtas
+  const limpa = bruta.replace(/[:•\-–]+$/,'').trim();
+  if(!limpa) return null;
+  let melhorSec=null, melhorSim=0, melhorPalavra=null;
+  HEADERS_FUZZY.forEach(({sec,palavras})=>{
+    palavras.forEach(p=>{
+      const sim = similaridadeNomes(limpa, p);
+      if(sim>melhorSim){ melhorSim=sim; melhorSec=sec; melhorPalavra=p; }
+    });
+  });
+  return melhorSim>=LIMIAR_SIMILARIDADE_HEADER ? {sec:melhorSec, palavra:melhorPalavra, sim:melhorSim} : null;
+}
+
+function parseRelatorioTexto(rawOriginal){
+  const raw = traduzirParaPtBr(rawOriginal);
+  const linhas = raw.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  const result = {
+    dataDetectada:null,
+    cxIni:null, cxFin:null,
+    depositos:[], // {val, quem}
+    funcionarios:[], // {nome, turnos, consumo, obs, warn, rawLine}
+    vendas:[], despesas:[], devias:[],
+    pizzas:{p:0,m:0,g:0,gg:0},
+    ignoradas:[] // {texto, motivo}
+  };
+  let secao = null; // null | 'vendas' | 'despesas' | 'devemos'
+  let secaoDevidaLabel = ''; // rótulo do cabeçalho que abriu a seção de dívidas (ex: "Devemos"), usado para categorizar o campo Detalhe de cada anotação abaixo dele
+  function labelDevida(keyword){
+    const k = (keyword||'').toLowerCase();
+    if(k.startsWith('devemos')) return 'Devemos';
+    if(k.startsWith('deve')) return 'Deve';
+    if(k.startsWith('anota')) return 'Anotações';
+    return 'Devendo';
+  }
+
+  const reData = /^(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?$/;
+  const reCxIni = /^caixa\s*inicial\s*:?\s*(.*)$/i;
+  const reCxFin = /^caixa\s*final\s*:?\s*(.*)$/i;
+  const reDeposito = /^dep[oó]sito\s*:?\s*(.*)$/i;
+  const reVendasHdr = /^vendas\s*:?\s*$/i;
+  const reDespesasHdr = /^despesas\s*:?\s*$/i;
+  const reDevemosHdr = /^(devemos|deve|deve-se|deve-se a|anota[cç][oõ]es)\s*:?\s*$/i;
+  const rePizza = /^pizzas?\s+(pequenas?|m[eé]dias?|grandes?|gigantes?)\s*:?/i;
+  // Linhas de totalização que o próprio app gera no relatório final (ex:
+  // "Total vendas: R$ 57,00", "Total despesas: R$ 22,00", "Total depósitos:
+  // R$ 100,00") — ao reimportar um relatório já finalizado, essas linhas são
+  // só um resumo redundante dos itens já listados acima; devem ser ignoradas
+  // silenciosamente, nunca tratadas como um item novo nem como erro.
+  const reTotalLinha = /^total\s+(vendas?|despesas?|dep[oó]sitos?)\s*:?\s*(r\$)?\s*[\d.,]*\s*$/i;
+  // Formato exportado pelo próprio relatório para uma anotação/dívida:
+  // "Nome - R$ valor - detalhe" (o detalhe é opcional). É o mesmo formato
+  // que a tela "Anotações/Devendo" mostra e que gerarTexto() produz — o
+  // importador precisa entender de volta o que ele mesmo gera.
+  const reDeviaExport = /^(.+?)\s*-\s*r\$\s*([\d.,]+)(?:\s*-\s*(.+))?$/i;
+  // Linha de entregador (com ou sem valor colado na mesma linha, separado por
+  // tab ou múltiplos espaços — comum ao copiar de planilha/tabela).
+  const reEntregadorComValor = /^(entregador\s*:\s*.+?)[ \t]+([\d.,]+)\s*$/i;
+  const reEntregador = /^entregador\s*:\s*.+$/i;
+  const reTelefoneLinha = /^telefone\s*:\s*.+$/i;
+  const reSoValorRS = /^r\$\s*([\d.,]+)\s*$/i;
+  // "Nome deve 120" ou "Nome deve R$ 120,00" — formato livre de anotação de
+  // dívida fora do bloco "devemos:"
+  const reNomeDeve = /^(.{1,40}?)\s+deve\s+(?:r\$\s*)?([\d.,]+)\s*$/i;
+
+  for(let idx=0; idx<linhas.length; idx++){
+    const linha = linhas[idx];
+
+    // data tipo 25.06, 25/06/2026, ou *01/07/2026* (título em negrito do
+    // próprio relatório exportado por este app — precisa reconhecer de volta).
+    let mm;
+    const linhaSemAsterisco = linha.replace(/^\*+|\*+$/g, '');
+    if((mm=linhaSemAsterisco.match(reData))){ result.dataDetectada = linhaSemAsterisco; continue; }
+
+    // linhas de total (redundantes com os itens já listados) — ignora sem erro
+    if(reTotalLinha.test(linha)){ continue; }
+
+    // pizzas no texto colado: soma ao contador atual (mesmos botões +/-)
+    let mPizza;
+    if((mPizza=linha.match(rePizza))){
+      const tipoTxt = mPizza[1].toLowerCase();
+      const tipoKey = tipoTxt.startsWith('peq') ? 'p' : tipoTxt.startsWith('m') ? 'm' : tipoTxt.startsWith('gig') ? 'gg' : 'g';
+      const resto = linha.slice(mPizza[0].length).replace(/^:?\s*/, '').trim();
+      const qtd = parseInt(resto, 10);
+      if(!isNaN(qtd)){
+        result.pizzas[tipoKey] = (result.pizzas[tipoKey]||0) + qtd;
+      } else {
+        result.ignoradas.push({texto:linha, motivo:'Quantidade de pizza não reconhecida'});
+      }
+      continue;
+    }
+
+    // cabeçalhos de seção
+    if(reVendasHdr.test(linha)){ secao='vendas'; continue; }
+    if(reDespesasHdr.test(linha)){ secao='despesas'; continue; }
+    if(reDevemosHdr.test(linha)){ secao='devemos'; const mHdr=linha.match(reDevemosHdr); secaoDevidaLabel=labelDevida(mHdr?mHdr[1]:'devemos'); continue; }
+    // cabeçalho com texto sobrando na mesma linha (ex: "VENDAS: 3 itens") — entra
+    // na seção mesmo assim e descarta o resto, em vez de interpretar a palavra
+    // reservada como nome de funcionário mais adiante.
+    if(/^vendas\s*:/i.test(linha)){ secao='vendas'; result.ignoradas.push({texto:linha, motivo:'Cabeçalho de seção com texto extra (ignorado)'}); continue; }
+    if(/^despesas\s*:/i.test(linha)){ secao='despesas'; result.ignoradas.push({texto:linha, motivo:'Cabeçalho de seção com texto extra (ignorado)'}); continue; }
+    if(/^(devemos|deve)\s*:/i.test(linha)){
+      // "devemos: 28,00 yoel" tudo numa linha só — processa o resto já como
+      // primeira entrada da seção "devemos", além de abrir a seção para as
+      // linhas seguintes.
+      secao='devemos';
+      const mHdrInline = linha.match(/^(devemos|deve)\s*:/i);
+      secaoDevidaLabel = labelDevida(mHdrInline?mHdrInline[1]:'devemos');
+      const resto = linha.replace(/^(devemos|deve)\s*:\s*/i,'').trim();
+      if(resto){
+        const m3 = resto.match(/^([\d.,]+)\s+(.+)$/) || resto.match(/^(.+?)\s+([\d.,]+)\s*$/);
+        if(m3){
+          // decide qual grupo é valor e qual é nome, testando ambas as ordens
+          let val = parseMoneyLoose(m3[1]);
+          let nome = m3[2];
+          if(isNaN(val)){ val = parseMoneyLoose(m3[2]); nome = m3[1]; }
+          if(!isNaN(val)){ result.devias.push({nome:nome.trim(), val, det:secaoDevidaLabel}); continue; }
+        }
+        result.devias.push({nome:resto, val:0, det:secaoDevidaLabel, warn:true});
+      }
+      continue;
+    }
+
+    // cabeçalho com erro de digitação (ex: "depisas", "depesas" em vez de
+    // "despesas") — só entra aqui se nenhum dos padrões exatos acima bateu.
+    const headerFuzzy = detectarHeaderFuzzy(linha);
+    if(headerFuzzy){
+      secao = headerFuzzy.sec;
+      if(headerFuzzy.sec==='devemos') secaoDevidaLabel = labelDevida(headerFuzzy.palavra);
+      continue;
+    }
+
+    // caixa inicial / final (podem vir vazios)
+    if((mm=linha.match(reCxIni))){
+      const v=parseMoneyLoose(mm[1]);
+      result.cxIni = isNaN(v) ? {pendente:true} : {val:v};
+      continue;
+    }
+    if((mm=linha.match(reCxFin))){
+      const v=parseMoneyLoose(mm[1]);
+      result.cxFin = isNaN(v) ? {pendente:true} : {val:v};
+      continue;
+    }
+    if((mm=linha.match(reDeposito))){
+      const resto=mm[1].trim();
+      if(!resto){ result.depositos.push({val:null, quem:'', pendente:true}); continue; }
+      const v=parseMoneyLoose(resto.split('-')[0]);
+      const quem=resto.includes('-') ? resto.split('-').slice(1).join('-').trim() : '';
+      result.depositos.push({val:isNaN(v)?null:v, quem, pendente:isNaN(v)});
+      continue;
+    }
+
+    // ===== DEVENDO (em qualquer ponto do texto, mesmo dentro de outra seção) =====
+    // Esses padrões são específicos o bastante (palavra "deve", ou "Entregador:"
+    // seguido de "Telefone:") para nunca serem confundidos com venda/despesa —
+    // por isso são checados antes de decidir a seção atual. Isso cobre o caso
+    // comum de colar essas anotações soltas depois do bloco de Despesas, sem
+    // nenhum cabeçalho novo avisando a troca de assunto.
+
+    // 1) "Nome deve 120" ou "Nome deve R$ 120,00"
+    let mDeve;
+    if((mDeve=linha.match(reNomeDeve))){
+      const val=parseMoneyLoose(mDeve[2]);
+      if(!isNaN(val)){ result.devias.push({nome:mDeve[1].trim(), val, det:''}); continue; }
+    }
+
+    // 1b) "Nome - R$ valor - detalhe" (formato que o próprio app exporta em
+    // "ANOTAÇÕES:" — precisa entender de volta ao reimportar um relatório já
+    // finalizado). O detalhe é opcional.
+    let mDeviaExp;
+    if((mDeviaExp=linha.match(reDeviaExport))){
+      const val=parseMoneyLoose(mDeviaExp[2]);
+      if(!isNaN(val)){ result.devias.push({nome:mDeviaExp[1].trim(), val, det:(mDeviaExp[3]||'').trim()}); continue; }
+    }
+
+    // 2) Bloco "Entregador: NOME" / "Telefone: ..." / opcionalmente "R$ valor"
+    //    em linhas separadas. Junta nome+telefone numa única anotação.
+    if(reEntregador.test(linha) && !reEntregadorComValor.test(linha)){
+      const linhaTelefoneRaw = linhas[idx+1];
+      if(linhaTelefoneRaw && reTelefoneLinha.test(linhaTelefoneRaw)){
+        let consumed = 1; // quantas linhas extras (além desta) foram usadas
+        let val = null;
+        let linhaTelefoneFinal = linhaTelefoneRaw;
+
+        // O valor da dívida às vezes vem colado na MESMA linha do telefone,
+        // separado por tab/espaços (comum ao colar de uma tabela/planilha):
+        // "Telefone: (049) 99997-1707    156,00". Nesse caso o valor não é
+        // parte do telefone (telefone não tem vírgula decimal) — extrai e
+        // guarda só o telefone limpo no texto da anotação.
+        const mValorNaLinhaTelefone = linhaTelefoneRaw.match(/^(.*?)[ \t]+(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})\s*$/);
+        if(mValorNaLinhaTelefone){
+          linhaTelefoneFinal = mValorNaLinhaTelefone[1].trim();
+          val = parseMoneyLoose(mValorNaLinhaTelefone[2]);
+        } else {
+          // ou então numa linha própria, logo abaixo do telefone
+          const linhaValor = linhas[idx+2];
+          if(linhaValor){
+            const mv = linhaValor.match(reSoValorRS) || linhaValor.match(/^([\d.,]+)\s*$/);
+            if(mv){ val = parseMoneyLoose(mv[1]); consumed = 2; }
+          }
+        }
+
+        result.devias.push({
+          nome: linha + '\n' + linhaTelefoneFinal,
+          val: (val!=null && !isNaN(val)) ? val : 0,
+          det: '',
+          warn: (val==null || isNaN(val)) // sem valor reconhecido: marca para revisão
+        });
+        idx += consumed; // pula as linhas já consumidas
+        continue;
+      }
+    }
+
+    // 3) "Entregador: NOME<tab ou espaços>VALOR" na mesma linha, seguida de
+    //    "Telefone: ..." na linha de baixo.
+    let mEV;
+    if((mEV=linha.match(reEntregadorComValor))){
+      const linhaTelefone = linhas[idx+1];
+      const val = parseMoneyLoose(mEV[2]);
+      if(linhaTelefone && reTelefoneLinha.test(linhaTelefone)){
+        result.devias.push({ nome: mEV[1].trim() + '\n' + linhaTelefone, val: isNaN(val)?0:val, det:'', warn: isNaN(val) });
+        idx += 1;
+        continue;
+      } else if(!isNaN(val)){
+        // sem linha de telefone depois — ainda assim é uma dívida válida
+        result.devias.push({ nome: mEV[1].trim(), val, det:'' });
+        continue;
+      }
+    }
+
+    // dentro de uma seção: vendas / despesas / devemos
+    if(secao==='vendas' || secao==='despesas'){
+      // formatos aceitos, em qualquer ordem — a funcionária às vezes escreve
+      // "564,00 - Troco", às vezes "taxa 9" (descrição antes do valor):
+      let val = NaN, desc = '';
+      const mValDesc = linha.match(/^([\d.,]+)\s*[-–]?\s*(.*)$/);   // "564,00 - Troco"
+      const mDescVal = linha.match(/^(.+?)\s+([\d.,]+)\s*$/);       // "taxa 9"
+      if(mValDesc && !isNaN(parseMoneyLoose(mValDesc[1]))){
+        val = parseMoneyLoose(mValDesc[1]); desc = mValDesc[2].trim();
+      } else if(mDescVal && !isNaN(parseMoneyLoose(mDescVal[2]))){
+        val = parseMoneyLoose(mDescVal[2]); desc = mDescVal[1].trim();
+      }
+      if(!isNaN(val)){
+        desc = desc || (secao==='vendas'?'Venda':'Despesa');
+        (secao==='vendas'?result.vendas:result.despesas).push({val, desc, plat:'Balcão'});
+        continue;
+      }
+      result.ignoradas.push({texto:linha, motivo:`Não entendi este valor de ${secao}`});
+      continue;
+    }
+    if(secao==='devemos'){
+      // formato esperado: "jeremia 16,00" OU "16,00 jeremia" (nome e valor
+      // podem vir em qualquer ordem — tentamos as duas antes de desistir).
+      let val = NaN, nome = '';
+      const m3a = linha.match(/^(.+?)\s+([\d.,]+)\s*$/); // nome ... valor
+      const m3b = linha.match(/^([\d.,]+)\s+(.+)$/);     // valor ... nome
+      if(m3a && !isNaN(parseMoneyLoose(m3a[2]))){ val=parseMoneyLoose(m3a[2]); nome=m3a[1].trim(); }
+      else if(m3b && !isNaN(parseMoneyLoose(m3b[1]))){ val=parseMoneyLoose(m3b[1]); nome=m3b[2].trim(); }
+      // O campo Detalhe recebe o rótulo da categoria que abriu esta seção
+      // (ex: "Devemos") — assim, ao olhar a anotação depois, fica claro a
+      // que ela se refere, sem precisar lembrar de onde veio no texto colado.
+      if(!isNaN(val)){ result.devias.push({nome, val, det:secaoDevidaLabel}); continue; }
+      // Sem valor numérico reconhecível: pode ser uma anotação sem valor
+      // (ex: "Moto João - levou maquininha") ou algo sem relação com dívida.
+      // Como não dá para saber com certeza, importa como anotação mas marca
+      // para revisão, em vez de assumir silenciosamente. Linhas muito longas
+      // (provavelmente não são nomes de pessoa) vão direto para ignoradas.
+      if(linha.length<=40){
+        result.devias.push({nome:linha, val:0, det:secaoDevidaLabel, warn:true});
+      } else {
+        result.ignoradas.push({texto:linha, motivo:'Não parece uma dívida (nome + valor) — revise manualmente'});
+      }
+      continue;
+    }
+
+    // ===== FUNCIONÁRIO (linha "Nome: resto") =====
+    const mNome = linha.match(/^([^:]{1,40}):\s*(.*)$/);
+    if(mNome){
+      const nome = mNome[1].trim();
+      let resto = mNome[2].trim();
+      const { turnos, consumo: consumoTxt, horarioIlegivel } = extrairTurnosComPlaceholder(resto);
+      // Sem horário nenhum: só é motivo de revisão se também não houver
+      // consumo registrado (linha realmente vazia/ambígua). Se a pessoa
+      // consumiu algo (ex: "André: pizza volta"), isso já é informação
+      // suficiente e completa — não precisa de revisão manual, só precisa
+      // aparecer no relatório final (ver gerarTexto). Um "xx:xx" no meio do
+      // texto também pede revisão, mesmo com horário e/ou consumo presentes,
+      // porque uma das pontas do turno ficou marcada como ilegível.
+      const semHorario = turnos.length===0;
+      const semHorarioESemConsumo = semHorario && !consumoTxt;
+      const precisaRevisao = semHorarioESemConsumo || horarioIlegivel;
+      result.funcionarios.push({
+        nome, turnos, consumo: consumoTxt, obs:'',
+        warn: precisaRevisao,
+        warnMsg: precisaRevisao
+          ? (horarioIlegivel ? 'Horário ilegível ("xx:xx") em algum turno — confira manualmente' : 'Sem horário identificado — confira manualmente')
+          : null,
+        rawLine: linha
+      });
+      continue;
+    }
+
+    // não bateu em nenhum padrão conhecido
+    result.ignoradas.push({texto:linha, motivo:'Formato não reconhecido'});
+  }
+
+  // ===== MESCLAR DUPLICADOS DENTRO DO PRÓPRIO TEXTO COLADO =====
+  // Mesmo nome (idêntico após normalizar) aparecendo em mais de uma linha:
+  // soma os turnos e o consumo num único registro, em vez de duplicar a pessoa.
+  // Isso é automático porque o nome é o mesmo — não há ambiguidade aqui.
+  const funcMesclados = [];
+  result.funcionarios.forEach(f=>{
+    const existente = funcMesclados.find(e=>normalizaNome(e.nome)===normalizaNome(f.nome));
+    if(existente){
+      existente.turnos = [...existente.turnos, ...f.turnos];
+      const consumosUnicos = [...new Set([existente.consumo, f.consumo].filter(Boolean))];
+      existente.consumo = consumosUnicos.join(', ');
+      existente.warn = existente.warn || f.warn;
+      existente.rawLine = existente.rawLine + ' | ' + f.rawLine;
+      existente._mesclado = true;
+    } else {
+      funcMesclados.push({...f});
+    }
+  });
+  result.funcionarios = funcMesclados;
+
+  return result;
+}
+
+function processarImport(){
+  const raw = document.getElementById('import-raw').value;
+  if(!raw.trim()){ alert('Cole algum texto primeiro.'); return; }
+  importParsed = parseRelatorioTexto(raw);
+  detectarDuplicadosComEstadoAtual(importParsed);
+  renderImportPreview(importParsed);
+  document.getElementById('import-step-paste').style.display='none';
+  document.getElementById('import-step-preview').style.display='block';
+}
+
+// Compara os funcionários recém-importados com os que já existem no relatório
+// de hoje (state.funcionarios). Nome idêntico (normalizado) -> mescla
+// automaticamente (marca mergeAuto, sem perguntar). Nome parecido mas não
+// idêntico -> marca como sugestão (mergeSugestao), exibida no preview com a
+// opção de confirmar antes de aplicar.
+function detectarDuplicadosComEstadoAtual(p){
+  const existentes = (state && state.funcionarios) || [];
+  p.funcionarios.forEach(f=>{
+    f.mergeAuto = null;     // índice no state.funcionarios para mesclar automaticamente
+    f.mergeSugestao = null; // {idx, nomeExistente} sugestão a confirmar
+    f.mergeConfirmado = false; // marcado true quando o usuário confirma a sugestão
+    let melhorSim = 0, melhorIdx = -1;
+    existentes.forEach((ex,idx)=>{
+      const sim = similaridadeNomes(ex.nome, f.nome);
+      if(sim>melhorSim){ melhorSim=sim; melhorIdx=idx; }
+    });
+    if(melhorIdx>=0 && melhorSim===1){
+      f.mergeAuto = melhorIdx;
+    } else if(melhorIdx>=0 && melhorSim>=LIMIAR_SIMILARIDADE_NOME){
+      f.mergeSugestao = { idx:melhorIdx, nomeExistente: existentes[melhorIdx].nome, sim:melhorSim };
+    }
+  });
+}
+
+function renderImportPreview(p){
+  const totalFunc=p.funcionarios.length, warnFunc=p.funcionarios.filter(f=>f.warn).length;
+  const summaryParts=[];
+  if(p.dataDetectada) summaryParts.push(`Data encontrada no texto: <strong>${escapeHTML(p.dataDetectada)}</strong> (será somado ao relatório de hoje)`);
+  summaryParts.push(`${totalFunc} funcionário(s)${warnFunc?`, ${warnFunc} para revisar ⚠️`:''}`);
+  summaryParts.push(`${p.vendas.length} venda(s), ${p.despesas.length} despesa(s), ${p.devias.length} anotação(ões)`);
+  if(p.depositos.length) summaryParts.push(`${p.depositos.length} depósito(s)`);
+  const totalPizzasImp = p.pizzas ? (p.pizzas.p||0)+(p.pizzas.m||0)+(p.pizzas.g||0)+(p.pizzas.gg||0) : 0;
+  if(totalPizzasImp>0) summaryParts.push(`${totalPizzasImp} pizza(s) iFood (serão somadas ao contador)`);
+  if(p.cxIni) summaryParts.push('Caixa inicial detectado');
+  if(p.cxFin) summaryParts.push('Caixa final detectado');
+  if(p.ignoradas.length) summaryParts.push(`${p.ignoradas.length} linha(s) não importada(s)`);
+  document.getElementById('import-summary').innerHTML = summaryParts.join(' · ');
+
+  let html='';
+  if(p.cxIni) html+=lineRow(p.cxIni.pendente?'Caixa Inicial: (vazio — pendência)':`Caixa Inicial: R$ ${fmt(p.cxIni.val)}`, p.cxIni.pendente?'warn':'ok','Caixa');
+  if(p.cxFin) html+=lineRow(p.cxFin.pendente?'Caixa Final: (vazio — pendência)':`Caixa Final: R$ ${fmt(p.cxFin.val)}`, p.cxFin.pendente?'warn':'ok','Caixa');
+  p.depositos.forEach(d=>html+=lineRow(d.pendente?'Depósito: (vazio — pendência)':`Depósito: R$ ${fmt(d.val)}${d.quem?' - '+escapeHTML(d.quem):''}`, d.pendente?'warn':'ok','Depósito'));
+  p.funcionarios.forEach((f,fi)=>{
+    const turnosTxt=f.turnos.map(t=>`${t.ent||'?'}-${t.sai||'?'}`).join(' | ');
+    const det=[turnosTxt, f.consumo].filter(Boolean).join(' · ');
+    if(f.mergeAuto!=null){
+      html+=lineRow(`${escapeHTML(f.nome)}${det?': '+escapeHTML(det):''} <span style="color:var(--green);">— será somado ao já existente "${escapeHTML(state.funcionarios[f.mergeAuto].nome)}"</span>`,'ok','Mesclar');
+    } else if(f.mergeSugestao && !f.mergeConfirmado){
+      const pct = Math.round(f.mergeSugestao.sim*100);
+      html+=`<div class="imp-line warn" style="flex-direction:column;align-items:stretch;gap:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+          <div>${escapeHTML(f.nome)}${det?': '+escapeHTML(det):''}<br><span style="color:var(--orange);">Parece ser a mesma pessoa que "${escapeHTML(f.mergeSugestao.nomeExistente)}" já no relatório de hoje (${pct}% parecido)</span></div>
+          <span class="imp-tag">Confirmar?</span>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-green" style="padding:4px 10px;font-size:11px;" onclick="confirmarMergeSugestao(${fi},true)">✅ É a mesma pessoa</button>
+          <button class="btn btn-gray" style="padding:4px 10px;font-size:11px;" onclick="confirmarMergeSugestao(${fi},false)">São diferentes</button>
+        </div>
+      </div>`;
+    } else if(f.mergeSugestao && f.mergeConfirmado){
+      html+=lineRow(`${escapeHTML(f.nome)}${det?': '+escapeHTML(det):''} <span style="color:var(--green);">— confirmado: será somado a "${escapeHTML(f.mergeSugestao.nomeExistente)}"</span>`,'ok','Mesclar');
+    } else {
+      html+=lineRow(`${escapeHTML(f.nome)}${det?': '+escapeHTML(det):''}`, f.warn?'warn':'ok', f.warn?'Revisar':'Funcionário');
+    }
+  });
+  p.vendas.forEach(v=>html+=lineRow(`${escapeHTML(v.desc)} — R$ ${fmt(v.val)}`,'ok','Venda'));
+  p.despesas.forEach(d=>html+=lineRow(`${escapeHTML(d.desc)} — R$ ${fmt(d.val)}`,'ok','Despesa'));
+  p.devias.forEach(d=>html+=lineRow(`${escapeHTML(d.nome).replace(/\n/g,'<br>')}${d.val?' — R$ '+fmt(d.val):''}`, d.warn?'warn':'ok', d.warn?'Revisar':'Devendo'));
+  if(p.pizzas){
+    const PL={p:'Pequena',m:'Média',g:'Grande',gg:'Gigante'};
+    Object.keys(PL).forEach(k=>{ if(p.pizzas[k]>0) html+=lineRow(`${PL[k]}: +${p.pizzas[k]}`,'ok','Pizza iFood'); });
+  }
+  p.ignoradas.forEach(i=>html+=lineRow(`${escapeHTML(i.texto)} <span style="color:var(--muted);">(${escapeHTML(i.motivo)})</span>`,'warn','Não importado'));
+  document.getElementById('import-preview-list').innerHTML = html || '<div class="empty">Nada reconhecido neste texto.</div>';
+}
+
+function confirmarMergeSugestao(idx, ehMesmaPessoa){
+  if(!importParsed) return;
+  const f = importParsed.funcionarios[idx];
+  if(!f || !f.mergeSugestao) return;
+  if(ehMesmaPessoa){
+    f.mergeConfirmado = true;
+  } else {
+    f.mergeSugestao = null; // trata como pessoa nova, sem mesclar
+  }
+  renderImportPreview(importParsed);
+}
+
+function lineRow(html, cls, tag){
+  return `<div class="imp-line ${cls}"><div>${html}</div><span class="imp-tag">${escapeHTML(tag)}</span></div>`;
+}
+
+function confirmarImport(){
+  if(!importParsed) return;
+  const p = importParsed;
+  if(!currentDate) currentDate = todayStr();
+  state = normalizeState(state);
+
+  if(p.cxIni && !p.cxIni.pendente) state.cxIni = p.cxIni.val;
+  if(p.cxFin && !p.cxFin.pendente) state.cxFin = p.cxFin.val;
+  p.depositos.forEach(d=>{ if(!d.pendente) state.depositos.push({val:d.val, quem:d.quem}); });
+  p.funcionarios.forEach(f=>{
+    const idxAlvo = (f.mergeAuto!=null) ? f.mergeAuto : (f.mergeSugestao && f.mergeConfirmado ? f.mergeSugestao.idx : null);
+    if(idxAlvo!=null && state.funcionarios[idxAlvo]){
+      // Mescla com o funcionário já existente: soma turnos e consumo, não duplica.
+      const ex = state.funcionarios[idxAlvo];
+      ex.turnos = [...(ex.turnos||[]), ...f.turnos];
+      const consumosUnicos = [...new Set([ex.consumo, f.consumo].filter(Boolean))];
+      ex.consumo = consumosUnicos.join(', ');
+      if(f.warn) ex.obs = [ex.obs, `⚠️ Revisar — texto original: "${f.rawLine}"`].filter(Boolean).join(' · ');
+    } else {
+      state.funcionarios.push({
+        nome:f.nome, turnos:f.turnos, consumo:f.consumo,
+        obs: f.warn ? `⚠️ Revisar — texto original: "${f.rawLine}"` : '',
+        freelance:false, vlrHora:0, totalPago:0, horasStr:'', horasTotal:0
+      });
+    }
+  });
+  p.vendas.forEach(v=>state.vendas.push({val:v.val, desc:v.desc, plat:v.plat}));
+  p.despesas.forEach(d=>state.despesas.push({val:d.val, desc:d.desc, plat:d.plat}));
+  p.devias.forEach(d=>state.devias.push({
+    nome:d.nome, val:d.val||0,
+    det: d.warn ? (d.det ? d.det+' · ⚠️ revisar (importado sem valor claro)' : '⚠️ revisar (importado sem valor claro)') : (d.det||'')
+  }));
+  if(p.pizzas){
+    state.pizzas.p = (state.pizzas.p||0) + (p.pizzas.p||0);
+    state.pizzas.m = (state.pizzas.m||0) + (p.pizzas.m||0);
+    state.pizzas.g = (state.pizzas.g||0) + (p.pizzas.g||0);
+    state.pizzas.gg = (state.pizzas.gg||0) + (p.pizzas.gg||0);
+  }
+
+  setMoneyField('cx-ini', state.cxIni);
+  setMoneyField('cx-fin', state.cxFin);
+  render();
+  save();
+  fecharModal('modal-import');
+  const avisos = p.funcionarios.filter(f=>f.warn).length + p.ignoradas.length;
+  alert(avisos>0
+    ? `✅ Importado! ⚠️ ${avisos} item(ns) precisam de revisão manual (marcados no relatório).`
+    : '✅ Importado com sucesso!');
+}
+
+
+// ===== COPIAR =====
+function copiarSecao(tipo){
+  let txt='',arr=tipo==='vendas'?state.vendas:state.despesas;
+  if(!arr.length){alert('Nenhum item para copiar.');return;}
+  // Sem título de seção aqui — o botão "Copiar" é para colar só a lista dos
+  // itens em si (o título "VENDAS:"/"DESPESAS:" só existe no relatório
+  // completo, gerado por "Copiar relatório completo").
+  arr.forEach(it=>{txt+=`${fmt(it.val)} - ${escapeHTML(it.desc)}\n`;});
+  copiar(txt.trim());
+}
+function copiarTudo(){copiar(gerarTexto(state,currentDate));}
+function copiarVer(){copiar(gerarTexto(editState,editDate));}
+function copiar(txt){navigator.clipboard.writeText(txt).then(()=>alert('✅ Copiado!')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);alert('✅ Copiado!');});}
+
+// ===== HISTÓRICO =====
+// ===== BACKUP COMPLETO (exportar/restaurar todos os dias) =====
+async function exportarBackup(){
+  const keys = await window._loadAllKeys();
+  if(!keys.length){ alert('Nenhum relatório salvo ainda — nada para fazer backup.'); return; }
+  const dados = {};
+  keys.forEach(k=>{ const d = window._getCached(k); if(d) dados[k]=d; });
+  const payload = { app:'relatorio-pizzaria', geradoEm: new Date().toISOString(), dados };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup_pizzaria_${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function importarBackup(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const dados = parsed && parsed.dados ? parsed.dados : parsed; // aceita backup novo ou um JSON simples {data: relatorio}
+    const chaves = Object.keys(dados||{});
+    if(!chaves.length){ alert('Arquivo de backup vazio ou em formato não reconhecido.'); event.target.value=''; return; }
+    if(!confirm(`Este backup tem ${chaves.length} dia(s) de relatório. Os dados serão somados/sobrescritos por data — dias já existentes com a mesma data serão substituídos pelo backup. Continuar?`)){ event.target.value=''; return; }
+    let ok=0, falhas=0;
+    for(const k of chaves){
+      try{ await window._save(k, normalizeState(dados[k])); ok++; }
+      catch(e){ falhas++; }
+    }
+    alert(`✅ Restaurado: ${ok} dia(s)${falhas?`\n⚠️ Falhou: ${falhas} dia(s)`:''}`);
+    carregarHistorico();
+  }catch(e){
+    alert('Não consegui ler este arquivo. Confira se é um backup válido (.json) gerado por este app.');
+  }
+  event.target.value='';
+}
+
+async function carregarHistorico(){
+  document.getElementById('hist-content').innerHTML='<div class="empty">Carregando...</div>';
+  const keys=await window._loadAllKeys();
+  if(!keys.length){document.getElementById('hist-content').innerHTML='<div class="empty">Nenhum relatório salvo ainda.</div>';return;}
+  const tree={};
+  keys.sort().reverse().forEach(k=>{const[y,m]=k.split('-');if(!tree[y])tree[y]={};if(!tree[y][m])tree[y][m]=[];tree[y][m].push(k);});
+  const mesAtualChave = todayStr().slice(0,7); // "YYYY-MM" do dia comercial atual
+  let html='';
+  Object.keys(tree).sort().reverse().forEach(y=>{
+    html+=`<div class="hist-year">📅 ${y}</div>`;
+    Object.keys(tree[y]).sort().reverse().forEach(m=>{
+      const chaveMes = `${y}-${m}`;
+      const aberto = chaveMes===mesAtualChave;
+      const diasHtml = tree[y][m].map(k=>{
+        const isToday=k===todayStr();
+        return `<div class="hist-day">
+          <div>
+            <div style="font-weight:600;">📋 ${fmtDate(k)}${isToday?' <span style="background:var(--green);color:#fff;font-size:10px;padding:2px 7px;border-radius:99px;margin-left:6px;">Hoje</span>':''}</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="verDia('${k}')" class="btn btn-gray" style="padding:5px 12px;font-size:12px;">Ver</button>
+            <button onclick="editarDia('${k}')" class="btn btn-green" style="padding:5px 12px;font-size:12px;">✏️ Editar</button>
+          </div>
+        </div>`;
+      }).join('');
+      html+=`<div class="hist-month" onclick="toggleHistMes('${chaveMes}')">
+        <span>${MESES_FULL[parseInt(m)-1]} <span style="color:var(--muted);font-weight:400;">(${tree[y][m].length})</span></span>
+        <span class="hist-month-arrow" id="hist-arrow-${chaveMes}">${aberto?'▾':'▸'}</span>
+      </div>
+      <div class="hist-month-days" id="hist-days-${chaveMes}" style="${aberto?'':'display:none;'}">${diasHtml}</div>`;
+    });
+  });
+  document.getElementById('hist-content').innerHTML=html;
+}
+function toggleHistMes(chaveMes){
+  const dias = document.getElementById('hist-days-'+chaveMes);
+  const arrow = document.getElementById('hist-arrow-'+chaveMes);
+  if(!dias) return;
+  const abrir = dias.style.display==='none';
+  dias.style.display = abrir ? 'block' : 'none';
+  if(arrow) arrow.textContent = abrir ? '▾' : '▸';
+}
+
+
+async function verDia(dateKey){
+  editDate=dateKey;
+  document.getElementById('ver-titulo').textContent=fmtDate(dateKey);
+  document.getElementById('edit-data-label').textContent=fmtDate(dateKey);
+  document.getElementById('ver-preview').textContent='Carregando...';
+  showPage('page-ver');switchVerTab('ver');
+  const data=await window._load(dateKey);
+  editState=data?cloneState(data):emptyState();
+  document.getElementById('ver-preview').textContent=gerarTexto(editState,dateKey);
+}
+
+async function editarDia(dateKey){
+  // Paridade total: edita o dia do histórico na MESMA tela do relatório de
+  // hoje. Apontamos currentDate/state pra esse dia — render(), save(),
+  // switchTab(), o botão de planilha e tudo mais funcionam igualzinho.
+  editandoHistorico = true;
+  editDate = dateKey;
+  currentDate = dateKey;
+  document.getElementById('hdr-right').textContent = fmtDate(dateKey) + ' (histórico)';
+
+  const cached = window._getCached ? window._getCached(dateKey) : null;
+  state = cached ? cloneState(cached) : emptyState();
+  setMoneyField('cx-ini', state.cxIni);
+  setMoneyField('cx-fin', state.cxFin);
+  render();
+  showPage('page-rel');
+  switchTab('anotar');
+  atualizarBotaoVoltar();
+
+  if(window._load){
+    window._load(dateKey).then(data=>{
+      if(data && currentDate===dateKey && JSON.stringify(normalizeState(data)) !== JSON.stringify(normalizeState(state))){
+        state = cloneState(data);
+        setMoneyField('cx-ini', state.cxIni);
+        setMoneyField('cx-fin', state.cxFin);
+        render();
+      }
+    });
+  }
+}
+// Ajusta o botão "Voltar" da aba Finalizar conforme o contexto: se estamos
+// editando um dia do histórico, volta pro Histórico; senão, pra Home.
+function atualizarBotaoVoltar(){
+  const btn = document.getElementById('btn-voltar-rel');
+  if(!btn) return;
+  btn.textContent = editandoHistorico ? '← Voltar ao histórico' : '← Voltar ao início';
+}
+function voltarDoRelatorio(){
+  if(editandoHistorico){
+    editandoHistorico = false;
+    document.getElementById('hdr-right').textContent='';
+    irHistorico();
+  } else {
+    irHome();
+  }
+}
+
+// ===== CALCULADORA DE HORAS (freelance, multi-dia) =====
+let calcDias = []; // [{data:'YYYY-MM-DD', ent:'HH:MM', sai:'HH:MM'}]
+let calcEditIdx = -1; // índice do cálculo salvo sendo editado (-1 = novo)
+
+// ===== ENVIAR HORÁRIOS PRA PLANILHA (Google Apps Script) =====
+const PLANILHA_URL_KEY = 'piz_planilha_url';
+const EQUIPE_KEY = 'piz_equipe';
+
+// Lê a lista de nomes da equipe cadastrada (array de strings). Vazio se nunca
+// configurou.
+function getEquipe(){
+  try {
+    const raw = localStorage.getItem(EQUIPE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(n=>n && n.trim()) : [];
+  } catch(e){ return []; }
+}
+function setEquipe(arr){
+  localStorage.setItem(EQUIPE_KEY, JSON.stringify(arr.filter(n=>n && n.trim())));
+}
+
+// Guarda temporário enquanto edita a tela de config (só grava no localStorage
+// ao clicar em Salvar).
+let configEquipeTmp = [];
+
+function irConfig(){
+  configEquipeTmp = getEquipe();
+  if(!configEquipeTmp.length) configEquipeTmp = [''];
+  document.getElementById('config-planilha-url').value = localStorage.getItem(PLANILHA_URL_KEY) || '';
+  document.getElementById('config-status').textContent = '';
+  renderConfigEquipe();
+  showPage('page-config');
+}
+
+function renderConfigEquipe(){
+  const el = document.getElementById('config-equipe-list');
+  el.innerHTML = configEquipeTmp.map((nome,i)=>`
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+      <input type="text" value="${escapeHTML(nome)}" placeholder="Nome (igual à aba da planilha)"
+        oninput="configEquipeTmp[${i}]=this.value" style="flex:1;"/>
+      <button class="btn btn-red" style="padding:8px 10px;" title="Remover" onclick="removeNomeEquipe(${i})">✕</button>
+    </div>`).join('');
+}
+function addNomeEquipe(){ configEquipeTmp.push(''); renderConfigEquipe();
+  setTimeout(()=>{ const inputs=document.querySelectorAll('#config-equipe-list input'); if(inputs.length) inputs[inputs.length-1].focus(); },30);
+}
+function removeNomeEquipe(i){ configEquipeTmp.splice(i,1); if(!configEquipeTmp.length) configEquipeTmp=['']; renderConfigEquipe(); }
+
+function salvarConfig(){
+  const vistos = new Set();
+  const limpa = [];
+  configEquipeTmp.forEach(n=>{
+    const t = (n||'').trim();
+    if(t && !vistos.has(t.toLowerCase())){ vistos.add(t.toLowerCase()); limpa.push(t); }
+  });
+  setEquipe(limpa);
+  const url = document.getElementById('config-planilha-url').value.trim();
+  if(url) localStorage.setItem(PLANILHA_URL_KEY, url);
+  configEquipeTmp = limpa.length?limpa:[''];
+  renderConfigEquipe();
+  const st = document.getElementById('config-status');
+  st.style.color = 'var(--green)';
+  st.textContent = `✅ Salvo! ${limpa.length} nome(s) na equipe.`;
+}
+
+
+// Converte "HH:MM" em minutos desde 00:00.
+function horaParaMin(h){
+  if(!h || !/^\d{1,2}:\d{2}$/.test(h)) return null;
+  const [hh,mm] = h.split(':').map(Number);
+  return hh*60+mm;
+}
+// Formata minutos de volta em "HH:MM" (pode passar de 24h, ex: 26:00).
+function minParaHora(min){
+  const hh = Math.floor(min/60);
+  const mm = min%60;
+  return `${hh}:${String(mm).padStart(2,'0')}`;
+}
+// Ajusta a saída para o "banco de horas": se a saída for de madrugada
+// (menor ou igual à entrada, ex: entrou 18:30 e saiu 02:00), soma 24h na
+// saída — 02:00 vira 26:00. Só ajusta quando temos AMBOS os horários; se a
+// saída estiver em branco (funcionário não anotou), devolve vazio pra ir em
+// branco na planilha mesmo. Recebe as strings de entrada e saída do turno.
+function saidaBancoHoras(entrada, saida){
+  const mEnt = horaParaMin(entrada);
+  const mSai = horaParaMin(saida);
+  if(mSai===null) return ''; // sem saída anotada -> vai vazio
+  if(mEnt===null) return saida; // sem entrada mas com saída -> manda como veio
+  let mFinal = mSai;
+  if(mSai <= mEnt) mFinal = mSai + 24*60; // passou da meia-noite
+  return minParaHora(mFinal);
+}
+
+// Monta a lista de funcionários com turnos prontos pra planilha. Manda TODO
+// funcionário que tenha ao menos uma entrada OU saída anotada — mesmo que
+// falte a saída (vai o que tem, o resto em branco). Freelance e "só consumo"
+// (sem horário nenhum) ficam de fora. Cada funcionário vai com no máximo 2
+// turnos: turno 1 -> colunas B/C, turno 2 -> colunas D/E. Se tiver 3+ turnos,
+// junta tudo em 2: entrada do 1º turno + saída do penúltimo/último, mantendo
+// o intervalo do meio como 2º par quando dá — na prática a pizzaria usa 1 ou
+// 2 turnos, então isso cobre com folga.
+function montarDadosPlanilha(){
+  state = normalizeState(state);
+  const dia = parseInt(currentDate.split('-')[2], 10);
+  const out = [];
+  state.funcionarios.forEach(f=>{
+    if(f.freelance || f.fromCalc) return;
+    // considera qualquer turno que tenha PELO MENOS um dos horários
+    const turnosBrutos = (f.turnos||[]).filter(t=>t.ent || t.sai);
+    if(!turnosBrutos.length) return; // sem horário nenhum = só consumo, ignora
+
+    let turnos;
+    if(turnosBrutos.length<=2){
+      turnos = turnosBrutos.map(t=>({ ent: t.ent||'', sai: saidaBancoHoras(t.ent, t.sai) }));
+    } else {
+      // 3+ turnos: colapsa em 2 pares. 1º par = 1º turno; 2º par = último
+      // turno (do intervalo do meio pra saída final). Assim nada se perde nos
+      // dois espaços de entrada/saída da planilha.
+      const primeiro = turnosBrutos[0];
+      const ultimo = turnosBrutos[turnosBrutos.length-1];
+      turnos = [
+        { ent: primeiro.ent||'', sai: saidaBancoHoras(primeiro.ent, primeiro.sai) },
+        { ent: ultimo.ent||'', sai: saidaBancoHoras(ultimo.ent, ultimo.sai) }
+      ];
+    }
+    out.push({ nome: f.nome, dia, turnos });
+  });
+  return { dia, funcionarios: out };
+}
+
+function abrirModalPlanilha(){
+  if(!currentDate) currentDate = todayStr();
+  const url = localStorage.getItem(PLANILHA_URL_KEY) || '';
+  document.getElementById('pl-url').value = url;
+  document.getElementById('pl-status').textContent = '';
+  const dados = montarDadosPlanilha();
+  document.getElementById('pl-dia').textContent = dados.dia;
+  const prev = document.getElementById('pl-preview');
+  if(!dados.funcionarios.length){
+    prev.innerHTML = '<div class="empty">Nenhum funcionário com entrada e saída completas hoje.</div>';
+  } else {
+    prev.innerHTML = dados.funcionarios.map(f=>{
+      const turnosTxt = f.turnos.map(t=>`${t.ent} – ${t.sai}`).join('  |  ');
+      return `<div class="item-card"><div class="item-left"><div class="item-desc"><strong>${escapeHTML(f.nome)}</strong> &nbsp; <span style="color:var(--muted);font-family:monospace;">${turnosTxt}</span></div></div></div>`;
+    }).join('');
+  }
+  abrirModal('modal-planilha');
+}
+
+async function enviarParaPlanilha(){
+  const url = document.getElementById('pl-url').value.trim();
+  const status = document.getElementById('pl-status');
+  if(!url || !/^https:\/\/script\.google\.com\/.*\/exec$/.test(url)){
+    status.style.color = 'var(--red)';
+    status.textContent = '⚠️ Cole uma URL válida do Apps Script (deve terminar em /exec).';
+    return;
+  }
+  localStorage.setItem(PLANILHA_URL_KEY, url);
+  const dados = montarDadosPlanilha();
+  if(!dados.funcionarios.length){
+    status.style.color = 'var(--orange)';
+    status.textContent = 'Nada pra enviar — nenhum funcionário com entrada e saída completas.';
+    return;
+  }
+  const btn = document.getElementById('pl-btn-enviar');
+  btn.disabled = true;
+  status.style.color = 'var(--muted)';
+  status.textContent = '⏳ Enviando...';
+  try {
+    // O Apps Script Web App aceita POST simples. Usamos text/plain pra evitar
+    // o "preflight" CORS (o Google não responde a OPTIONS), enviando o JSON
+    // como corpo mesmo assim.
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(dados)
+    });
+    const data = await res.json();
+    if(data && data.ok){
+      const oks = (data.resultados||[]).filter(r=>r.ok);
+      const criadas = oks.filter(r=>r.criada);
+      const falhas = (data.resultados||[]).filter(r=>!r.ok);
+      status.style.color = 'var(--green)';
+      let msg = `✅ Enviado! ${oks.length} funcionário(s) gravado(s) na planilha.`;
+      if(criadas.length){
+        msg += `<br><span style="color:var(--green);">🆕 ${criadas.length} página(s) nova(s) criada(s): ${criadas.map(r=>escapeHTML(r.aba||r.nome)).join(', ')}</span>`;
+      }
+      if(falhas.length){
+        msg += `<br><span style="color:var(--orange);">⚠️ ${falhas.length} precisa(m) de revisão manual (nada foi gravado nesses):<br>` +
+          falhas.map(f=>'• <strong>'+escapeHTML(f.nome)+'</strong>: '+escapeHTML(f.motivo||'?')).join('<br>') + '</span>';
+      }
+      status.innerHTML = msg;
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = '❌ A planilha respondeu com erro: ' + (data && data.erro ? data.erro : 'desconhecido');
+    }
+  } catch(e){
+    status.style.color = 'var(--red)';
+    status.innerHTML = '❌ Não consegui enviar. Confira se a URL está certa e se o Apps Script foi publicado com acesso "Qualquer pessoa".';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function abrirCalculadora(){
+  abrirModalCalcHist();
+}
+
+async function abrirModalCalcHist(){
+  const cache = await calcLoadAll();
+  const lista = Object.keys(cache).map(id=>({id, ...cache[id]})).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const el = document.getElementById('cc-hist-list');
+  if(!lista.length){
+    el.innerHTML='<div class="empty">Nenhum cálculo salvo ainda.</div>';
+  } else {
+    el.innerHTML = lista.map(c=>{
+      const totalHoras = (c.dias||[]).reduce((s,d)=>s+(calcHorasUmDia(d)||0),0);
+      const totalPag = totalHoras*(parseFloat(c.vlrHora)||0);
+      return `<div class="calc-hist-card">
+        <div>
+          <div style="font-weight:700;">${escapeHTML(c.nome||'(sem nome)')}</div>
+          <div style="font-size:12px;color:var(--muted);">${(c.dias||[]).length} dia(s) · ${totalHoras.toFixed(2).replace(/\.00$/,'')}h · R$ ${fmt(totalPag)}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-calc" style="padding:5px 10px;font-size:12px;" onclick="abrirEditarCalculo('${c.id}')">✏️ Abrir</button>
+          <button class="btn btn-red" style="padding:5px 10px;font-size:12px;" onclick="excluirCalculo('${c.id}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  abrirModal('modal-calc-hist');
+}
+
+function abrirNovoCalculo(){
+  calcEditIdx = -1;
+  document.getElementById('cc-idx').value = '';
+  document.getElementById('cc-nome').value = '';
+  setMoneyField('cc-vlrh','');
+  document.getElementById('cc-obs').value='';
+  calcDias = [{data:'', ent:'', sai:''}];
+  renderCalcDias();
+  calcCalculadora();
+  abrirModal('modal-calc');
+}
+
+async function abrirEditarCalculo(id){
+  const cache = await calcLoadAll();
+  const c = cache[id];
+  if(!c){ alert('Cálculo não encontrado.'); return; }
+  fecharModal('modal-calc-hist');
+  document.getElementById('cc-idx').value = id;
+  document.getElementById('cc-nome').value = c.nome||'';
+  setMoneyField('cc-vlrh', c.vlrHora||'');
+  document.getElementById('cc-obs').value = c.obs||'';
+  calcDias = (c.dias&&c.dias.length) ? c.dias.map(d=>({...d})) : [{data:'',ent:'',sai:''}];
+  renderCalcDias();
+  calcCalculadora();
+  abrirModal('modal-calc');
+}
+
+async function excluirCalculo(id){
+  if(!confirm('Excluir este cálculo salvo?')) return;
+  const cache = await calcLoadAll();
+  delete cache[id];
+  await calcSaveAll(cache);
+  abrirModalCalcHist();
+}
+
+function renderCalcDias(){
+  const el = document.getElementById('cc-dias');
+  el.innerHTML = calcDias.map((d,i)=>`
+    <div class="calc-day-card" id="cc-day-${i}">
+      <div class="calc-day-hdr">
+        <input type="date" value="${d.data||''}" onchange="ccSetDia(${i},'data',this.value)" style="border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;flex:1;"/>
+        <button class="btn btn-red" style="padding:4px 8px;font-size:11px;" onclick="removerDiaCalculadora(${i})">✕</button>
+      </div>
+      <div class="row2">
+        <div class="fg"><label>Entrada</label><input type="time" value="${d.ent||''}" onchange="ccSetDia(${i},'ent',this.value)"/></div>
+        <div class="fg"><label>Saída</label><input type="time" value="${d.sai||''}" onchange="ccSetDia(${i},'sai',this.value)"/></div>
+      </div>
+      <div style="font-size:12px;color:var(--calcred);font-weight:600;margin-top:6px;" id="cc-day-horas-${i}"></div>
+    </div>`).join('');
+  calcDias.forEach((d,i)=>atualizarHorasDia(i));
+}
+function ccSetDia(i,campo,valor){ calcDias[i][campo]=valor; atualizarHorasDia(i); calcCalculadora(); }
+function addDiaCalculadora(){ calcDias.push({data:'',ent:'',sai:''}); renderCalcDias(); calcCalculadora(); }
+function removerDiaCalculadora(i){ calcDias.splice(i,1); if(!calcDias.length) calcDias.push({data:'',ent:'',sai:''}); renderCalcDias(); calcCalculadora(); }
+
+function calcHorasUmDia(d){
+  if(!d || !d.ent || !d.sai) return 0;
+  const[h1,m1]=d.ent.split(':').map(Number);const[h2,m2]=d.sai.split(':').map(Number);
+  let mins=(h2*60+m2)-(h1*60+m1); if(mins<0) mins+=1440;
+  return mins/60;
+}
+function atualizarHorasDia(i){
+  const el = document.getElementById(`cc-day-horas-${i}`);
+  if(!el) return;
+  const h = calcHorasUmDia(calcDias[i]);
+  el.textContent = h>0 ? `${h.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1')}h trabalhadas` : '';
+}
+function calcCalculadora(){
+  const vlr = parseMoney(document.getElementById('cc-vlrh').value)||0;
+  const totalHoras = calcDias.reduce((s,d)=>s+calcHorasUmDia(d),0);
+  const totalPag = totalHoras*vlr;
+  const el = document.getElementById('cc-total');
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;color:var(--calcred);">
+      <span>Total de horas</span><span>${totalHoras.toFixed(2).replace(/\.00$/,'')}h</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;color:var(--calcred);margin-top:6px;">
+      <span>Total a pagar</span><span>R$ ${fmt(totalPag)}</span>
+    </div>`;
+}
+
+async function salvarCalculo(){
+  const nome = document.getElementById('cc-nome').value.trim();
+  if(!nome){ alert('Digite o nome do freelance.'); return; }
+  const vlrHora = parseMoney(document.getElementById('cc-vlrh').value)||0;
+  const obs = document.getElementById('cc-obs').value.trim();
+  const diasValidos = calcDias.filter(d=>d.data||d.ent||d.sai);
+  const idAtual = document.getElementById('cc-idx').value || ('calc_'+Date.now()+'_'+Math.random().toString(16).slice(2));
+  const cache = await calcLoadAll();
+  cache[idAtual] = { nome, vlrHora, obs, dias: diasValidos, updatedAt: Date.now() };
+  await calcSaveAll(cache);
+  document.getElementById('cc-idx').value = idAtual;
+  upsertFuncFromCalc(idAtual, nome, vlrHora, obs, diasValidos);
+  alert('✅ Cálculo salvo! Ele já aparece na lista de Funcionários do relatório de hoje.');
+}
+
+// Reflete o cálculo salvo como uma entrada (freelance) na lista de
+// Funcionários do relatório de HOJE, sem listar dia a dia ali (isso fica
+// escondido atrás do botão "Ver dias trabalhados" no próprio card) — mas
+// já mostrando o total pago, igual qualquer outro freelance.
+function upsertFuncFromCalc(calcId, nome, vlrHora, obs, dias){
+  if(!currentDate) currentDate = todayStr();
+  state = normalizeState(state);
+  const totalHoras = dias.reduce((s,d)=>s+calcHorasUmDia(d),0);
+  const totalPago = totalHoras*vlrHora;
+  const horasStr = totalHoras>0 ? fmtHorasNum(totalHoras) : '';
+  const reg = {
+    nome, turnos:[], consumo:'', obs,
+    freelance:true, fromCalc:true, calcId,
+    vlrHora, totalPago,
+    horasStr, horasTotal: totalHoras,
+    calcDias: dias.map(d=>({...d}))
+  };
+  const existingIdx = state.funcionarios.findIndex(f=>f.fromCalc && f.calcId===calcId);
+  if(existingIdx>=0) state.funcionarios[existingIdx]=reg;
+  else state.funcionarios.push(reg);
+  render();
+  save();
+}
+
+// ===== MODAL =====
+function abrirModal(id){document.getElementById(id).style.display='flex';}
+function fecharModal(id){document.getElementById(id).style.display='none';}
+// Fecha o modal ao clicar no fundo escuro — mas só quando o clique de fato
+// COMEÇA e TERMINA no fundo. Sem isso, selecionar um texto dentro do modal e
+// soltar o mouse fora dele (comum ao arrastar a seleção) dispara um "click"
+// no fundo e fecha o modal sem avisar, descartando o que estava sendo digitado.
+document.querySelectorAll('.modal-bg').forEach(m=>{
+  let mousedownNoFundo = false;
+  m.addEventListener('mousedown', e=>{ mousedownNoFundo = (e.target===m); });
+  m.addEventListener('click', e=>{
+    if(e.target===m && mousedownNoFundo) m.style.display='none';
+    mousedownNoFundo = false;
+  });
+});
+
+// ===== GLOBALS =====
+window.abrirRelatorio = abrirRelatorio;
+const btnAbrir = document.getElementById('btn-abrir');
+if(btnAbrir) btnAbrir.addEventListener('click', function(ev){ ev.preventDefault(); window.abrirRelatorioSafe(); });
+window.irHome=irHome;window.irHistorico=irHistorico;
+window.irConfig=irConfig;window.salvarConfig=salvarConfig;window.addNomeEquipe=addNomeEquipe;window.removeNomeEquipe=removeNomeEquipe;
+window.voltarInicio=voltarInicio;window.onNomeSelectChange=onNomeSelectChange;
+window.cicleTheme=cicleTheme;
+window.switchTab=switchTab;window.switchVerTab=switchVerTab;
+window.abrirModalDep=abrirModalDep;window.editDep=editDep;window.remDep=remDep;window.salvarDep=salvarDep;
+window.eAbrirModalDep=eAbrirModalDep;window.eEditDep=eEditDep;window.eRemDep=eRemDep;
+window.autoSave=autoSave;
+window.editAutoSave=editAutoSave;
+window.abrirModalFunc=abrirModalFunc;window.eAbrirModalFunc=eAbrirModalFunc;
+window.editFunc=editFunc;window.eEditFunc=eEditFunc;
+window.remFunc=remFunc;window.eRemFunc=eRemFunc;
+window.salvarFunc=salvarFunc;window.addTurnoForm=addTurnoForm;window.calcFree=calcFree;
+window.removerTurnoForm=removerTurnoForm;
+window.abrirModalItem=abrirModalItem;window.eAbrirModalItem=eAbrirModalItem;
+window.editItem=editItem;window.eEditItem=eEditItem;
+window.remItem=remItem;window.eRemItem=eRemItem;window.salvarItem=salvarItem;
+window.abrirModalDevia=abrirModalDevia;window.eAbrirModalDevia=eAbrirModalDevia;
+window.abrirModalEntregador=abrirModalEntregador;window.eAbrirModalEntregador=eAbrirModalEntregador;
+window.editEntregador=editEntregador;window.eEditEntregador=eEditEntregador;
+window.remEntregador=remEntregador;window.eRemEntregador=eRemEntregador;
+window.salvarEntregador=salvarEntregador;
+window.copiarEntregadores=copiarEntregadores;window.eCopiarEntregadores=eCopiarEntregadores;
+window.editDevia=editDevia;window.eEditDevia=eEditDevia;
+// Nota: editFunc/editItem/editDevia já são as funções referenciadas pelos onclick
+// dos cards na tela "Anotar" — precisam estar expostas em window, assim como
+// suas versões "e" (edit) já estavam, para que o clique funcione nesse fluxo.
+window.remDevia=remDevia;window.eRemDevia=eRemDevia;window.salvarDevia=salvarDevia;
+window.selecionarTipoDevia=selecionarTipoDevia;
+window.copiarSecao=copiarSecao;window.copiarTudo=copiarTudo;window.copiarVer=copiarVer;
+window.verDia=verDia;window.editarDia=editarDia;window.fecharModal=fecharModal;
+window.voltarDoRelatorio=voltarDoRelatorio;window.atualizarBotaoVoltar=atualizarBotaoVoltar;
+window.toggleHistMes=toggleHistMes;
+window.exportarBackup=exportarBackup;window.importarBackup=importarBackup;
+window.showPage=showPage;
+window.ajustarPizza=ajustarPizza;window.definirPizza=definirPizza;
+window.eAjustarPizza=eAjustarPizza;window.eDefinirPizza=eDefinirPizza;
+window.filtrarFunc=filtrarFunc;window.eFiltrarFunc=eFiltrarFunc;
+window.irParaResultadoBusca=irParaResultadoBusca;
+window.irParaFim=irParaFim;
+window.abrirModalImport=abrirModalImport;window.voltarImportPaste=voltarImportPaste;
+window.processarImport=processarImport;window.confirmarImport=confirmarImport;
+window.confirmarMergeSugestao=confirmarMergeSugestao;
+window.abrirModalPlanilha=abrirModalPlanilha;window.enviarParaPlanilha=enviarParaPlanilha;
+window.abrirCalculadora=abrirCalculadora;window.abrirModalCalcHist=abrirModalCalcHist;
+window.abrirNovoCalculo=abrirNovoCalculo;window.abrirEditarCalculo=abrirEditarCalculo;
+window.excluirCalculo=excluirCalculo;window.ccSetDia=ccSetDia;
+window.addDiaCalculadora=addDiaCalculadora;window.removerDiaCalculadora=removerDiaCalculadora;
+window.calcCalculadora=calcCalculadora;window.salvarCalculo=salvarCalculo;
+window.toggleCalcDias=toggleCalcDias;window.upsertFuncFromCalc=upsertFuncFromCalc;
+
+// INIT
+setStatusSafe('☁️ Pronto','#1D9E75');
+initHome();
+</script>
+</body>
+</html>
