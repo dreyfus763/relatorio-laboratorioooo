@@ -7,7 +7,8 @@
 const DV_PATH='pizzaria_devias';      // lista única e permanente
 const LOG_PATH='pizzaria_log';        // aba de Registros (só acrescenta)
 const DV_CACHE='piz_dv_cache', LOG_CACHE='piz_log_cache', OUTBOX='piz_dv_outbox', MIG_FLAG='piz_dv_migrado', CORTE='piz_dv_corte';
-const DIAS_MIGRAR=7;                  // na 1ª vez, traz as anotações dos últimos 7 dias
+const DIAS_MIGRAR=0;                  // só traz as anotações de HOJE do formato antigo (1ª vez)
+const DIAS_PENDENTE=7;                // pendente com mais de 7 dias sai da aba Pendentes (fica só nos registros)
 
 let itens={}, logs={};
 let regTab='log', origemReg='home';
@@ -24,10 +25,15 @@ function salvarLocal(){gravarJSON(DV_CACHE,itens);gravarJSON(LOG_CACHE,logs);}
 function novoId(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function fmtHora(ts){const d=new Date(ts);return pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes());}
 function primeiraLinha(s){return String(s||'').split('\n')[0];}
-function diaMenos(n){const [y,m,d]=hoje().split('-').map(Number);const dt=new Date(y,m-1,d-n);return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());}
+function diaMenos(n,base){const [y,m,d]=(base||hoje()).split('-').map(Number);const dt=new Date(y,m-1,d-n);return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());}
 function modalAberto(){return !!document.querySelector('.modal-bg[style*="flex"]');}
 function versao(it){return (it&&(it.atualizadoEm||it.criadoEm))||0;}
 function corte(){let c=lerJSON(CORTE,'');if(!c){c=hoje();gravarJSON(CORTE,c);}return c;}
+// Só valem anotações de hoje em diante (a partir do dia em que o patch começou a rodar)
+function valido(i){return !!i&&i.criadoDia>=corte();}
+// Pendente com mais de 7 dias sai da aba Pendentes
+function expirado(i,ref){return i.criadoDia<diaMenos(DIAS_PENDENTE,ref||hoje());}
+function soHora(ts){const d=new Date(ts);return pad(d.getHours())+':'+pad(d.getMinutes());}
 
 // ---------- envio ao Firebase com fila (funciona offline) ----------
 let enviando=false;
@@ -71,8 +77,9 @@ async function sincronizar(){
     const [r,l]=await Promise.all([firebaseGet(DV_PATH),firebaseGet(LOG_PATH)]);
     const R=r||{}, L=l||{};
     const nI={}, nL={...L};
-    new Set([...Object.keys(itens),...Object.keys(R)]).forEach(id=>{nI[id]=escolher(itens[id],R[id]);});
+    new Set([...Object.keys(itens),...Object.keys(R)]).forEach(id=>{const x=escolher(itens[id],R[id]);if(valido(x))nI[id]=x;});
     Object.keys(logs).forEach(id=>{if(!nL[id])nL[id]=logs[id];});
+    Object.keys(nL).forEach(id=>{if(!(nL[id]&&nL[id].dia>=corte()))delete nL[id];});
     // reenvio do que o Firebase não tem (ou tem mais velho)
     if(agora()-negadoEm>5*60e3){
       Object.keys(nI).forEach(id=>{
@@ -163,8 +170,8 @@ function travarAntigos(){
 // ---------- listas ----------
 // Lista principal = só o que foi anotado HOJE.
 // Anotações de outros dias ficam na aba "Pendentes" (dentro de Registros).
-function doDia(tipo){return Object.values(itens).filter(i=>i.tipo===tipo&&!i.cancelado&&i.criadoDia===hoje());}
-function outrosDias(tipo){return Object.values(itens).filter(i=>i.tipo===tipo&&!i.cancelado&&i.criadoDia!==hoje()&&(!i.pago||i.pagoDia===hoje()));}
+function doDia(tipo){return Object.values(itens).filter(i=>valido(i)&&i.tipo===tipo&&!i.cancelado&&i.criadoDia===hoje());}
+function outrosDias(tipo){return Object.values(itens).filter(i=>valido(i)&&i.tipo===tipo&&!i.cancelado&&i.criadoDia!==hoje()&&!expirado(i)&&(!i.pago||i.pagoDia===hoje()));}
 function soma(l){return l.reduce((s,i)=>s+(Number(i.val)||0),0);}
 function agrupar(lista){
   const m=new Map();
@@ -176,7 +183,7 @@ function casa(i,termo){return !termo||(i.nome||'').toLowerCase().includes(termo)
 function cartao(it){
   const devem=it.tipo==='devem', bloq=!!it.travado;
   const corVal=devem?'var(--red)':'var(--green)';
-  const info='lançado '+fmtHora(it.criadoEm)+(it.pago&&it.pagoEm?' · pago '+fmtHora(it.pagoEm):'');
+  const info=(devem?'Devem · ':'Devemos · ')+'lançado '+fmtHora(it.criadoEm)+(it.pago&&it.pagoEm?' · pago '+fmtHora(it.pagoEm):'');
   return '<div class="devia-card '+(devem?'devem':'')+'" style="'+(it.pago?'opacity:.8;':'')+'">'+
     '<div style="display:flex;gap:8px;align-items:flex-start;min-width:0;">'+
       '<input type="checkbox" '+(it.pago?'checked ':'')+(bloq?'disabled ':'')+'onchange="dvMarcar(\''+it.id+'\',this.checked)" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;"/>'+
@@ -235,7 +242,7 @@ window.salvarDevia=function(){
 // ---------- texto do relatório ----------
 const gerarTextoBase=gerarTexto;
 function textoAnotacoes(dk){
-  const arr=Object.values(itens).filter(i=>!i.cancelado&&i.criadoDia<=dk&&(!i.pago||i.pagoDia>=dk)).sort((a,b)=>a.criadoEm-b.criadoEm);
+  const arr=Object.values(itens).filter(i=>valido(i)&&!expirado(i,dk)&&!i.cancelado&&i.criadoDia<=dk&&(!i.pago||i.pagoDia>=dk)).sort((a,b)=>a.criadoEm-b.criadoEm);
   const linha=i=>i.nome+(i.val?' - R$ '+fmt(i.val):'')+(i.det?' - '+i.det:'')+
     (i.criadoDia<dk?' (anotado '+fmtHora(i.criadoEm)+')':'')+(i.pago&&i.pagoDia===dk?' ✔ PAGO':'');
   let t='';
@@ -249,20 +256,6 @@ window.gerarTexto=function(st,dk){
   const base=gerarTextoBase({...st,devias:[]},dk);             // dias novos: lista permanente
   const extra=textoAnotacoes(dk);
   return extra?(base+'\n\n'+extra).trim():base;
-};
-
-// Importar texto colado: só o que foi acrescentado agora vai pra lista permanente
-const confirmarImportBase=confirmarImport;
-window.confirmarImport=function(){
-  const antes=(state&&state.devias?state.devias.length:0);
-  confirmarImportBase();
-  if(typeof editandoHistorico!=='undefined'&&editandoHistorico) return;
-  if(currentDate!==hoje()) return;
-  const novos=(state.devias||[]).slice(antes);
-  if(!novos.length) return;
-  novos.forEach(d=>dvCriar(d.tipo==='devem'?'devem':'devemos',d.nome,d.val,d.det||''));
-  state.devias.splice(antes);
-  window.renderDevia(); save();
 };
 
 // ---------- trazer anotações dos relatórios antigos ----------
@@ -286,15 +279,9 @@ async function migrar(dias){
   }
   corte();
   salvarLocal();
-  if(novos) registrar('migracao',null,'',novos+' anotação(ões) trazida(s) dos relatórios dos últimos '+dias+' dias');
+  if(novos) registrar('migracao',null,'',novos+' anotação(ões) de hoje trazida(s) do formato antigo');
   return novos;
 }
-window.dvTrazerAntigas=async function(){
-  const r=prompt('Trazer anotações dos relatórios dos últimos quantos dias? (ex: 30)\n\nAtenção: elas chegam como PENDENTES. Confira se não foram pagas.','30');
-  const n=parseInt(r,10); if(!n||n<1) return;
-  const q=await migrar(n); window.renderDevia(); dvRenderRegistros();
-  alert(q?('✅ '+q+' anotação(ões) trazida(s).'):'Nada novo para trazer.');
-};
 
 // ---------- aba Registros (Alterações | Pendentes | Pagos) ----------
 const ABAS=['log','pend','pagos'];
@@ -311,7 +298,6 @@ function montarPaginaRegistros(){
       '<button id="reg-tab-pagos" class="btn btn-gray" onclick="dvRegTab(\'pagos\')" style="flex:1;border-radius:7px;">Pagos</button></div>'+
     '<input type="text" id="reg-busca" class="func-search" placeholder="🔍 Buscar por nome..." oninput="dvRenderRegistros()"/>'+
     '<div id="reg-conteudo"></div>'+
-    '<div class="btn-row"><button class="btn btn-orange" onclick="dvTrazerAntigas()">📥 Trazer anotações de relatórios mais antigos</button></div>'+
     '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;">Os registros só acumulam: nada aqui pode ser editado ou apagado pelo app.</div>'+
    '</div>';
   document.body.appendChild(p);
@@ -346,42 +332,41 @@ window.dvRenderRegistros=function(){
   const el=$('reg-conteudo'); if(!el) return;
   const termo=(($('reg-busca')||{}).value||'').trim().toLowerCase();
   if(regTab==='log'){
-    let l=Object.values(logs).sort((a,b)=>b.ts-a.ts)
+    let l=Object.values(logs).filter(e=>e.dia>=corte()).sort((a,b)=>b.ts-a.ts)
       .filter(e=>!termo||(e.nome||'').toLowerCase().includes(termo)||(e.motivo||'').toLowerCase().includes(termo));
-    const total=l.length; l=l.slice(0,150);
-    el.innerHTML=l.length?l.map(e=>{const d=descLog(e);
-      return '<div class="item-card"><div class="item-left"><div style="font-size:10px;color:var(--muted);">'+fmtHora(e.ts)+'</div>'+
-             '<div style="font-size:12px;color:'+d.cor+';">'+d.txt+'</div></div></div>';}).join('')+
-      (total>150?'<div class="empty">Mostrando os 150 mais recentes de '+total+'. Use a busca para achar outros.</div>':'')
-      :'<div class="empty">Nenhum registro ainda.</div>';
+    const total=l.length; l=l.slice(0,200);
+    let html='', ultimo='';
+    l.forEach(e=>{
+      if(e.dia!==ultimo){ultimo=e.dia;html+='<div class="func-group-label">'+fmtDate(e.dia)+'</div>';}
+      const d=descLog(e);
+      html+='<div class="item-card"><div class="item-left"><div style="font-size:10px;color:var(--muted);">'+soHora(e.ts)+'</div>'+
+            '<div style="font-size:12px;color:'+d.cor+';">'+d.txt+'</div></div></div>';
+    });
+    if(total>200) html+='<div class="empty">Mostrando os 200 mais recentes de '+total+'. Use a busca para achar outros.</div>';
+    el.innerHTML=html||'<div class="empty">Nenhum registro ainda.</div>';
   } else if(regTab==='pend'){
-    const sec=(tipo,titulo)=>{
-      const l=outrosDias(tipo).filter(i=>casa(i,termo));
-      if(!l.length) return '';
-      const abertas=l.filter(i=>!i.pago);
-      const grupos=agrupar(l).sort((a,b)=>Math.min(...a.map(i=>i.criadoEm))-Math.min(...b.map(i=>i.criadoEm)));
-      return '<div class="func-group-label">'+titulo+' ('+abertas.length+')</div>'+
-        grupos.map(g=>{
-          const ab=g.filter(i=>!i.pago);
-          return '<div style="font-size:11px;font-weight:700;color:var(--muted);margin:8px 0 4px;">'+escapeHTML(primeiraLinha(g[0].nome))+
-            ' ('+ab.length+')</div>'+
-            g.sort((a,b)=>a.criadoEm-b.criadoEm).map(cartao).join('');
-        }).join('');
-    };
-    const html=sec('devemos','🟢 Devemos — de outros dias')+sec('devem','🔴 Devem pra nós — de outros dias');
-    el.innerHTML=html||'<div class="empty">Nenhuma pendência de outros dias.</div>';
+    const l=[...outrosDias('devemos'),...outrosDias('devem')].filter(i=>casa(i,termo));
+    const nota='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Pendentes com mais de '+DIAS_PENDENTE+' dias saem desta aba e ficam só em "Alterações".</div>';
+    if(!l.length){el.innerHTML=nota+'<div class="empty">Nenhuma pendência de outros dias.</div>';return;}
+    const dias=[...new Set(l.map(i=>i.criadoDia))].sort().reverse();
+    el.innerHTML=nota+dias.map(d=>{
+      const g=l.filter(i=>i.criadoDia===d).sort((a,b)=>a.criadoEm-b.criadoEm);
+      const ab=g.filter(i=>!i.pago).length;
+      return '<div class="func-group-label">'+fmtDate(d)+' ('+ab+' pendente'+(ab===1?'':'s')+')</div>'+g.map(cartao).join('');
+    }).join('');
   } else {
-    const pagos=Object.values(itens).filter(i=>i.pago&&!i.cancelado&&casa(i,termo));
+    const pagos=Object.values(itens).filter(i=>valido(i)&&i.pago&&!i.cancelado&&casa(i,termo));
     if(!pagos.length){el.innerHTML='<div class="empty">Nenhum pagamento registrado ainda.</div>';return;}
-    const grupos=agrupar(pagos).sort((a,b)=>Math.max(...b.map(i=>i.pagoEm||0))-Math.max(...a.map(i=>i.pagoEm||0)));
-    el.innerHTML=grupos.map(g=>
-      '<details class="item-card" style="display:block;">'+
-        '<summary style="cursor:pointer;font-size:13px;font-weight:700;">'+escapeHTML(primeiraLinha(g[0].nome))+
+    const dias=[...new Set(pagos.map(i=>i.pagoDia||'sem data'))].sort().reverse();
+    el.innerHTML=dias.map(d=>{
+      const g=pagos.filter(i=>(i.pagoDia||'sem data')===d).sort((a,b)=>(b.pagoEm||0)-(a.pagoEm||0));
+      return '<details class="item-card" style="display:block;">'+
+        '<summary style="cursor:pointer;font-size:13px;font-weight:700;">'+(d==='sem data'?d:fmtDate(d))+
         ' <span style="color:var(--muted);font-weight:500;">— '+g.length+' pago(s) · R$ '+fmt(soma(g))+'</span></summary>'+
-        g.sort((a,b)=>(b.pagoEm||0)-(a.pagoEm||0)).map(i=>
-          '<div style="font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border);">R$ '+fmt(i.val)+
-          ' · lançado '+fmtHora(i.criadoEm)+' · <span style="color:var(--green);">pago '+(i.pagoEm?fmtHora(i.pagoEm):'?')+'</span>'+(i.travado?' 🔒':'')+'</div>').join('')+
-      '</details>').join('');
+        g.map(i=>'<div style="font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border);"><b>'+escapeHTML(primeiraLinha(i.nome))+'</b> · R$ '+fmt(i.val)+
+          ' · '+(i.tipo==='devem'?'Devem':'Devemos')+' · lançado '+fmtHora(i.criadoEm)+' · <span style="color:var(--green);">pago '+(i.pagoEm?soHora(i.pagoEm):'?')+'</span>'+(i.travado?' 🔒':'')+'</div>').join('')+
+      '</details>';
+    }).join('');
   }
 };
 
@@ -403,11 +388,66 @@ function injetarBotoes(){
   }
 }
 
+// ---------- ajustes de tela ----------
+function injetarCss(){
+  const st=document.createElement('style'); st.id='dv-css';
+  st.textContent=
+   '#func-list .func-card{padding:5px 9px;margin-bottom:4px;}'+
+   '#func-list .func-name{font-size:12px;}'+
+   '#func-list .func-horario{font-size:11px;padding:1px 6px;}'+
+   '#func-list .func-turno-row{gap:1px;}'+
+   '#func-list .func-consumo,#func-list .func-obs{font-size:11px;margin-top:2px;}'+
+   '#func-list .func-pag{font-size:12px;margin-top:2px;}'+
+   '#func-list .func-card .btn{padding:2px 6px !important;font-size:10px !important;}'+
+   '#func-list .func-group-label{margin:6px 0 3px;font-size:10px;}';
+  document.head.appendChild(st);
+}
+// Importar texto não é mais necessário: some da tela
+function removerImportar(){
+  const b=document.querySelector('button[onclick="abrirModalImport()"]');
+  if(b){const linha=b.closest('.btn-row'); (linha||b).remove();}
+}
+// Card de Funcionários: fechado por padrão; abre no clique ou quando a busca acha alguém
+let funcManual=false, funcSuprimido=false, ultimoTermo='';
+function funcAchou(termo){
+  const lista=(state&&state.funcionarios)||[];
+  return !!termo&&lista.some(f=>(f.nome||'').toLowerCase().includes(termo));
+}
+function prepararFuncCard(){
+  const lista=$('func-list'); if(!lista) return;
+  const corpo=lista.closest('.sec-body'), sec=lista.closest('.sec'), tit=sec&&sec.querySelector('.sec-title');
+  if(!corpo||!tit) return;
+  corpo.id='func-corpo'; tit.id='func-titulo';
+  tit.style.cssText+='cursor:pointer;flex:1;user-select:none;';
+  tit.onclick=function(){
+    const termo=termoBuscaGlobal();
+    const aberto=funcManual||(funcAchou(termo)&&!funcSuprimido);
+    if(aberto){funcManual=false; if(funcAchou(termo)) funcSuprimido=true;}
+    else{funcManual=true; funcSuprimido=false;}
+    atualizarFuncCard();
+  };
+}
+function atualizarFuncCard(){
+  const corpo=$('func-corpo'), tit=$('func-titulo'); if(!corpo||!tit) return;
+  const termo=termoBuscaGlobal();
+  if(termo!==ultimoTermo){ultimoTermo=termo; funcSuprimido=false;}
+  const aberto=funcManual||(funcAchou(termo)&&!funcSuprimido);
+  corpo.style.display=aberto?'':'none';
+  const n=((state&&state.funcionarios)||[]).length;
+  tit.innerHTML=(aberto?'▾':'▸')+' 👥 Funcionários <span style="color:var(--muted);font-weight:500;">('+n+')</span>';
+}
+const renderFuncBase=renderFunc;
+window.renderFunc=function(){renderFuncBase();atualizarFuncCard();};
+
 // ---------- início ----------
 async function iniciar(){
   itens=lerJSON(DV_CACHE,{}); logs=lerJSON(LOG_CACHE,{});
   corte();
-  montarPaginaRegistros(); injetarBotoes(); window.renderDevia();
+  // limpa do aparelho o que é de antes do dia de início
+  Object.keys(itens).forEach(id=>{if(!valido(itens[id]))delete itens[id];});
+  Object.keys(logs).forEach(id=>{if(!(logs[id]&&logs[id].dia>=corte()))delete logs[id];});
+  salvarLocal();
+  montarPaginaRegistros(); injetarBotoes(); injetarCss(); removerImportar(); prepararFuncCard(); atualizarFuncCard(); window.renderDevia();
   await sincronizar(); travarAntigos(); window.renderDevia();
   if(!lerJSON(MIG_FLAG,false)){
     try{await migrar(DIAS_MIGRAR);gravarJSON(MIG_FLAG,true);}catch(e){}
