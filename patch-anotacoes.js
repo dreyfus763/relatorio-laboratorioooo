@@ -461,6 +461,12 @@ function atualizarFuncCard(){
 const renderFuncBase=renderFunc;
 window.renderFunc=function(){renderFuncBase();atualizarFuncCard();};
 
+// ---------- sem botão de enviar horários pra planilha ----------
+function removerEnviarPlanilha(){
+  const b=document.querySelector('button[onclick="abrirModalPlanilha()"]');
+  if(b) b.remove();
+}
+
 // ---------- histórico: sem edição ----------
 function removerEdicaoHistorico(){
   const v=$('ver-tab-ver');
@@ -535,7 +541,7 @@ async function iniciar(){
   Object.keys(itens).forEach(id=>{if(!valido(itens[id]))delete itens[id];});
   Object.keys(logs).forEach(id=>{if(!(logs[id]&&logs[id].dia>=corte()))delete logs[id];});
   salvarLocal();
-  montarPaginaRegistros(); injetarBotoes(); injetarCss(); removerImportar(); prepararFuncCard(); atualizarFuncCard(); removerEdicaoHistorico(); window.renderDevia();
+  montarPaginaRegistros(); injetarBotoes(); injetarCss(); removerImportar(); prepararFuncCard(); atualizarFuncCard(); removerEdicaoHistorico(); removerEnviarPlanilha(); window.renderDevia();
   await sincronizar(); travarAntigos(); window.renderDevia();
   if(!lerJSON(MIG_FLAG,false)){
     try{await migrar(DIAS_MIGRAR);gravarJSON(MIG_FLAG,true);}catch(e){}
