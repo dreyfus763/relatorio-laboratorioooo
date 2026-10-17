@@ -399,7 +399,29 @@ function injetarCss(){
    '#func-list .func-consumo,#func-list .func-obs{font-size:11px;margin-top:2px;}'+
    '#func-list .func-pag{font-size:12px;margin-top:2px;}'+
    '#func-list .func-card .btn{padding:2px 6px !important;font-size:10px !important;}'+
-   '#func-list .func-group-label{margin:6px 0 3px;font-size:10px;}';
+   '#func-list .func-group-label{margin:6px 0 3px;font-size:10px;}'+
+   // demais cards: menores que antes, porém um pouco maiores que os de funcionários
+   '.sec:not(.dv-func) > .sec-hdr{padding:8px 12px;}'+
+   '.sec:not(.dv-func) > .sec-body{padding:9px 12px;}'+
+   '.sec:not(.dv-func) .sec-title{font-size:12.5px;}'+
+   '.sec:not(.dv-func) > .sec-hdr .btn{padding:5px 10px;font-size:12px;}'+
+   '.item-card{padding:6px 9px;margin-bottom:5px;}'+
+   '.item-card .item-val{font-size:13px;}'+
+   '.item-card .item-desc{font-size:12px !important;}'+
+   '.item-card .item-actions .btn{padding:2px 6px !important;font-size:10px !important;}'+
+   '.dep-card{padding:6px 9px;margin-bottom:5px;font-size:13px;}'+
+   '.dep-card .btn{padding:2px 6px !important;font-size:10px !important;}'+
+   '.devia-card{padding:6px 9px;margin-bottom:4px;}'+
+   '.total-box{padding:7px 10px;margin-top:6px;font-size:13px;}'+
+   '#tab-anotar .fg input,#tab-anotar .fg select{padding:6px 9px;font-size:13px;}'+
+   '#tab-anotar .empty{padding:10px;}'+
+   // histórico: sem botão Editar
+   '#hist-content button[onclick^="editarDia"]{display:none !important;}'+
+   // raios do Fabinho
+   '.dv-bolt{opacity:0;animation:dvBolt 2.8s linear infinite;animation-delay:var(--d,0s);filter:drop-shadow(0 0 2px #4fd8ff) drop-shadow(0 0 5px rgba(79,216,255,.65));}'+
+   '.dv-flash{opacity:0;animation:dvFlash 2.8s linear infinite;animation-delay:var(--d,0s);}'+
+   '@keyframes dvBolt{0%,100%{opacity:0}2%{opacity:1}3.5%{opacity:.2}5%{opacity:1}8%{opacity:0}48%{opacity:0}49.5%{opacity:.9}51%{opacity:.15}52.5%{opacity:1}56%{opacity:0}}'+
+   '@keyframes dvFlash{0%,100%{opacity:0}2%{opacity:.09}3.5%{opacity:0}5%{opacity:.09}8%{opacity:0}48%{opacity:0}49.5%{opacity:.07}52.5%{opacity:.09}56%{opacity:0}}';
   document.head.appendChild(st);
 }
 // Importar texto não é mais necessário: some da tela
@@ -417,7 +439,7 @@ function prepararFuncCard(){
   const lista=$('func-list'); if(!lista) return;
   const corpo=lista.closest('.sec-body'), sec=lista.closest('.sec'), tit=sec&&sec.querySelector('.sec-title');
   if(!corpo||!tit) return;
-  corpo.id='func-corpo'; tit.id='func-titulo';
+  corpo.id='func-corpo'; tit.id='func-titulo'; sec.classList.add('dv-func');
   tit.style.cssText+='cursor:pointer;flex:1;user-select:none;';
   tit.onclick=function(){
     const termo=termoBuscaGlobal();
@@ -439,6 +461,72 @@ function atualizarFuncCard(){
 const renderFuncBase=renderFunc;
 window.renderFunc=function(){renderFuncBase();atualizarFuncCard();};
 
+// ---------- histórico: sem edição ----------
+function removerEdicaoHistorico(){
+  const v=$('ver-tab-ver');
+  if(v&&v.parentElement) v.parentElement.style.display='none';   // some o seletor Ver/Editar
+}
+
+// ---------- raios do Fabinho (mais elaborados, 4 raios) ----------
+function rnd(a,b){return a+Math.random()*(b-a);}
+function clampN(v,a,b){return Math.max(a,Math.min(b,v));}
+function raioPrincipal(x0,segs,jit){
+  const pts=[{x:x0,y:0}]; let x=x0;
+  for(let k=1;k<=segs;k++){
+    const y=(100/segs)*k+(k<segs?rnd(-3,3):0);
+    x=clampN(x+rnd(-jit,jit)*(Math.random()<0.25?1.8:1),4,96);   // de vez em quando uma quebra mais forte
+    pts.push({x:x,y:clampN(y,0,100)});
+  }
+  return pts;
+}
+function ramoRaio(o,dir,segs){
+  const pts=[{x:o.x,y:o.y}]; let x=o.x,y=o.y;
+  for(let k=0;k<segs;k++){
+    x=clampN(x+dir*rnd(3,8)*(1-k*0.15),2,98);
+    y=clampN(y+rnd(6,12),0,100);
+    pts.push({x:x,y:y});
+  }
+  return pts;
+}
+function dPath(pts){return pts.map(function(p,i){return (i?'L':'M')+p.x.toFixed(1)+','+p.y.toFixed(1);}).join(' ');}
+function stormSvgNovo(){
+  const bases=[8+rnd(0,8),30+rnd(0,10),56+rnd(0,10),80+rnd(0,10)];   // 4 raios
+  let grupos='', delayPrimeiro='0';
+  bases.forEach(function(bx,k){
+    const pts=raioPrincipal(bx,7+Math.floor(rnd(0,3)),9);
+    const delay=(k*0.65+rnd(0,0.35)).toFixed(2);
+    if(k===0) delayPrimeiro=delay;
+    const ramos=[]; const usados={};
+    const nR=2+Math.floor(rnd(0,2));
+    for(let r=0;r<nR;r++){
+      const idx=1+Math.floor(rnd(0,pts.length-3));
+      if(usados[idx]) continue; usados[idx]=1;
+      const dir=Math.random()<0.5?-1:1;
+      const rp=ramoRaio(pts[idx],dir,3+Math.floor(rnd(0,2)));
+      ramos.push(dPath(rp));
+      if(Math.random()<0.6&&rp.length>2) ramos.push(dPath(ramoRaio(rp[2],-dir,2)));   // sub-ramo
+    }
+    const principal=dPath(pts);
+    const base='fill="none" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"';
+    let g='<g class="dv-bolt" style="--d:'+delay+'s">';
+    g+='<path d="'+principal+'" '+base+' stroke="#4fd8ff" stroke-width="3" opacity=".55"/>';
+    ramos.forEach(function(d){g+='<path d="'+d+'" '+base+' stroke="#4fd8ff" stroke-width="1.8" opacity=".5"/>';});
+    g+='<path d="'+principal+'" '+base+' stroke="#ffffff" stroke-width="1.2"/>';
+    ramos.forEach(function(d){g+='<path d="'+d+'" '+base+' stroke="#d6fbff" stroke-width="0.8"/>';});
+    g+='</g>';
+    grupos+=g;
+  });
+  const flash='<rect class="dv-flash" style="--d:'+delayPrimeiro+'s" x="0" y="0" width="100" height="100" fill="#bff6ff"/>';
+  return '<svg class="storm-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">'+flash+grupos+'</svg>';
+}
+const funcCardBase=funcCard;
+window.funcCard=function(f,i,ctx){
+  const html=funcCardBase(f,i,ctx);
+  const fabinhoAtivo=funcStatus(f)==='presente'&&String(f.nome||'').trim().toLowerCase()==='fabinho';
+  if(!fabinhoAtivo) return html;
+  return html.replace(/<svg class="storm-svg"[\s\S]*?<\/svg>/,function(){return stormSvgNovo();});
+};
+
 // ---------- início ----------
 async function iniciar(){
   itens=lerJSON(DV_CACHE,{}); logs=lerJSON(LOG_CACHE,{});
@@ -447,7 +535,7 @@ async function iniciar(){
   Object.keys(itens).forEach(id=>{if(!valido(itens[id]))delete itens[id];});
   Object.keys(logs).forEach(id=>{if(!(logs[id]&&logs[id].dia>=corte()))delete logs[id];});
   salvarLocal();
-  montarPaginaRegistros(); injetarBotoes(); injetarCss(); removerImportar(); prepararFuncCard(); atualizarFuncCard(); window.renderDevia();
+  montarPaginaRegistros(); injetarBotoes(); injetarCss(); removerImportar(); prepararFuncCard(); atualizarFuncCard(); removerEdicaoHistorico(); window.renderDevia();
   await sincronizar(); travarAntigos(); window.renderDevia();
   if(!lerJSON(MIG_FLAG,false)){
     try{await migrar(DIAS_MIGRAR);gravarJSON(MIG_FLAG,true);}catch(e){}
